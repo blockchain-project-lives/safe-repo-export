@@ -39,6 +39,8 @@ jobs:
         shell: python
         run: |
           import os
+          import sys
+          sys.path.insert(0, os.environ["GITHUB_WORKSPACE"])
           from safe_repo_export.release import main
           raise SystemExit(main(["--check-tag", os.environ["RELEASE_TAG"]]))
       - run: python -m unittest discover -s tests -v
