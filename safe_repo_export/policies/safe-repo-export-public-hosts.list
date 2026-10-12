@@ -1,0 +1,23 @@
+# Literal hosts that may remain unchanged in documentation/build metadata.
+# Business RPC/API hosts are intentionally not allowlisted.
+localhost
+127.0.0.1
+0.0.0.0
+example.invalid
+github.com
+raw.githubusercontent.com
+maven.aliyun.com
+maven.apache.org
+repo.maven.apache.org
+jitpack.io
+repo1.maven.org
+maven.org
+maven.repository.redhat.com
+redhat.com
+spring.io
+www.w3.org
+xmlns.jcp.org
+schemas.xmlsoap.org
+mvnrepository.com
+learnmeabitcoin.com
+google.aip.dev

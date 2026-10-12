@@ -1,0 +1,4 @@
+# Case-sensitive repository-relative wildcard patterns.
+# Include every tracked file, then apply safe-repo-export-exclude.list.
+# Replace with narrower paths when sharing only part of a project.
+**

@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+*.pseudonym-salt
+.safe-repo-export.*.lock
+.safe-repo-export-install.*/

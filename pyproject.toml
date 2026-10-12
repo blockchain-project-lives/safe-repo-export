@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-repo-export"
+dynamic = ["version"]
+description = "Cross-platform project filtering, redaction and sanitized Git snapshot export"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Build Tools",
+]
+
+[project.scripts]
+safe-repo-export = "safe_repo_export.cli:main"
+safe-repo-export-version = "safe_repo_export.release:main"
+
+[tool.setuptools]
+packages = ["safe_repo_export", "safe_repo_export.policies"]
+
+[tool.setuptools.dynamic]
+version = {attr = "safe_repo_export._version.__version__"}
+
+[tool.setuptools.package-data]
+safe_repo_export = ["policies/*.list"]

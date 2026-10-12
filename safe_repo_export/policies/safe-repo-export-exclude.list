@@ -1,0 +1,65 @@
+# Original history and local state.
+**/.git/**
+**/.DS_Store
+**/Thumbs.db
+
+# Generated files, caches, dependencies and environments.
+**/target/**
+**/build/**
+**/dist/**
+**/out/**
+**/node_modules/**
+**/vendor/**
+**/__pycache__/**
+**/.pytest_cache/**
+**/.mypy_cache/**
+**/.ruff_cache/**
+**/.tox/**
+**/.venv/**
+**/venv/**
+**/.next/**
+**/.nuxt/**
+**/coverage/**
+**/*.egg-info/**
+**/*.pyc
+**/*.pyo
+**/*.log
+**/*.log.*
+
+# Local environment secrets (templates remain eligible).
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Key material and certificates.
+**/certs/**
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.keystore
+**/*.pem
+**/*.key
+**/*.der
+**/*.crt
+**/*.cer
+**/*.csr
+
+# Binary archives and build output.
+**/*.tvc
+**/*.boc
+**/*.bin
+**/*.class
+**/*.jar
+**/*.war
+**/*.zip
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+**/*.whl
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+**/*.min.js
+**/*.min.css
+**/*.map

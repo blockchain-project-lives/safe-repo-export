@@ -1,0 +1,5 @@
+# Files exempt from redaction AND built-in/Gitleaks scanning.
+# No default exemptions. Include/exclude filters still apply.
+# Enable only after reviewing the unchanged contents.
+# src/main/resources/mybatis/mappers/*.xml
+# docs/**

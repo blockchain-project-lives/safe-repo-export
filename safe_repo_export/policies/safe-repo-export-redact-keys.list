@@ -1,0 +1,27 @@
+# Case-insensitive regular expressions matched against YAML/JSON/properties/XML
+# keys and simple source-code assignment names. Matching values are replaced.
+(^|[._-])(password|passwd|pwd)($|[._-])
+(^|[._-])(secret|credential|credentials)($|[._-])
+# Covers apikey/apiKey, secretkey, access-key, subkey and authKey (including separators).
+(^|[._-])(api[-_.]?key|access[-_.]?key|secret[-_.]?key|auth[-_.]?key)($|[._-])
+(^|[._-])(private[-_.]?key|privatekey|keystore)($|[._-])
+(^|[._-])(signing[-_.]?key|aes[-_.]?key|des[-_.]?key|rsa[-_.]?key|encrypt[-_.]?key)($|[._-])
+(^|[._-])(mnemonic|seed|seed[-_.]?phrase)($|[._-])
+(^|[._-])(token|access[-_.]?token|refresh[-_.]?token|auth[-_.]?token|job[-_.]?access[-_.]?token)($|[._-])
+(^|[._-])(authorization|basic[-_.]?auth|bearer)($|[._-])
+(^|[._-])(webhook|hook[-_.]?url|bot[-_.]?token|chat[-_.]?id)($|[._-])
+(^|[._-])(rpc[-_.]?user|rpc[-_.]?password)($|[._-])
+(^|[._-])(node[-_.]?rpc|wallet[-_.]?rpc|rpc[-_.]?(url|uri|endpoint|host)|server[-_.]?(addr|address))($|[._-])
+(^|[._-])(username|user[-_.]?name)($|[._-])
+(^|[._-])(url|uri|endpoint|host|hostname|jdbc[-_.]?url)($|[._-])
+(^|[._-])(namespace|data[-_.]?id|group)($|[._-])
+(^|[._-])(address|wallet[-_.]?address|hot[-_.]?address|cold[-_.]?address|risk[-_.]?address|fee[-_.]?address|collection[-_.]?address|recipient|sender|owner)($|[._-])
+(^|[._-])(account[-_.]?id|user[-_.]?id|tenant[-_.]?id|client[-_.]?id|client[-_.]?secret)($|[._-])
+# Covers app-secret, app_secret, app.secret, appsecret and appSecret.
+(^|[._-])(app[-_.]?id|app[-_.]?secret|verification[-_.]?token)($|[._-])
+
+# Wallet keys and numbered key literals found in test/source assignments.
+(^|[._-])(spend[-_.]?key|view[-_.]?key|key[0-9]*)($|[._-])
+
+# Redis SUBKEY constants name cache entries, not credentials.
+^(?!redis[._-])(?:.*[._-])?sub[-_.]?key($|[._-])

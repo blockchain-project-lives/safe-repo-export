@@ -1,0 +1,5 @@
+# Gitleaks-only ignores. Redaction and built-in scanning still apply.
+# No default ignores. Use one complete original source line per entry,
+# regex: for full-line Python regexes, or path: for relative wildcard paths.
+# path:src/main/resources/mybatis/mappers/*.xml
+# regex:assertEquals\(\s*"example"\s*,\s*result\s*\);
