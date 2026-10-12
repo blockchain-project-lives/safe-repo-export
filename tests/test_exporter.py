@@ -80,6 +80,25 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(subprocess.check_output([*command, "status", "--porcelain"]), b"")
         self.assertEqual(subprocess.check_output([*command, "show", "HEAD:README.md"]), b"Project notes\n")
 
+    def test_native_git_ignores_external_global_excludes_and_attributes(self):
+        export(self.args())
+        ignored = self.root / "global-ignore"
+        ignored.write_bytes(b"native-probe.txt\n")
+        attributes = self.root / "global-attributes"
+        attributes.write_bytes(b"*.py text eol=crlf\n")
+        config = self.root / "global.gitconfig"
+        config.write_text(
+            '[core]\n    excludesFile = "' + ignored.as_posix() + '"\n' +
+            '    attributesFile = "' + attributes.as_posix() + '"\n', encoding="utf-8",
+        )
+        (self.output / "native-probe.txt").write_bytes(b"probe\n")
+        environment = dict(os.environ, GIT_CONFIG_GLOBAL=str(config), GIT_CONFIG_NOSYSTEM="1")
+        command = ["git", "-C", str(self.output)]
+        status = subprocess.check_output([*command, "status", "--porcelain"], env=environment)
+        self.assertIn(b"?? native-probe.txt", status)
+        attribute = subprocess.check_output([*command, "check-attr", "eol", "--", "src/app.py"], env=environment)
+        self.assertIn(b"eol: unspecified", attribute)
+
     def test_archives_checksums_and_idempotency(self):
         for kind in ("zip", "tar.gz"):
             with self.subTest(kind=kind):

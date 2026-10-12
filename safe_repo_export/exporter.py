@@ -210,8 +210,10 @@ def initialize_snapshot(root: Path, epoch: int, executables: set[str]) -> None:
     empty_hooks = root / ".git/export-empty-hooks"
     empty_hooks.mkdir()
     git(root, "config", "core.hooksPath", str(empty_hooks))
-    git(root, "config", "core.excludesFile", os.devnull)
-    git(root, "config", "core.attributesFile", os.devnull)
+    # Empty values disable global files without persisting platform-specific
+    # null-device names (Git for Windows rejects nul as an exclude file).
+    git(root, "config", "core.excludesFile", "")
+    git(root, "config", "core.attributesFile", "")
     git(root, "add", "--force", "--all")
     for name in sorted(executables):
         if (root / name).is_file():
