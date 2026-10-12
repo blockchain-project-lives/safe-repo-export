@@ -33,6 +33,12 @@ class VersionTests(unittest.TestCase):
         self.assertEqual(main(["minor", "--repo", str(self.repo)]), 0)
         self.assertIn(b'"1.3.0"', self.path.read_bytes())
 
+    def test_crlf_version_check_and_update_preserve_line_endings(self):
+        self.path.write_bytes(b'"""Version source."""\r\n\r\n__version__ = "1.2.3"\r\n')
+        self.assertEqual(check_tag(self.repo, "v1.2.3"), "1.2.3")
+        self.assertEqual(main(["patch", "--repo", str(self.repo)]), 0)
+        self.assertEqual(self.path.read_bytes(), b'"""Version source."""\r\n\r\n__version__ = "1.2.4"\r\n')
+
     def test_exact_tag_version_matching(self):
         self.assertEqual(check_tag(self.repo, "v1.2.3"), "1.2.3")
         for tag in ("1.2.3", "v1.2.4", "v01.2.3", "main", "v1.2.3-extra"):

@@ -12,7 +12,7 @@ from pathlib import Path
 from .exporter import ExportError, file_lock
 
 VERSION_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
-ASSIGNMENT_RE = re.compile(r'^__version__ = "(?P<version>[^"\r\n]+)"$', re.M)
+ASSIGNMENT_RE = re.compile(r'^__version__ = "(?P<version>[^"\r\n]+)"(?=\r?$)', re.M)
 VERSION_PATH = Path("safe_repo_export/_version.py")
 
 
