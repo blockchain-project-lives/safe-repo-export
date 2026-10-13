@@ -2,6 +2,39 @@ import unittest
 
 
 class TestPomGroupId(unittest.TestCase):
+    def test_pom_class_names_urls_and_sensitive_values(self):
+        import re
+        import tempfile
+        from collections import Counter
+        from pathlib import Path
+        from safe_repo_export.engine import Pseudonymizer, redact_file
+        original = (
+            '<project>\r\n'
+            '<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"/>\r\n'
+            '<mainClass>com.example.Main</mainClass><version>1.2.3</version>\r\n'
+            '<url>${repository.url}</url><name>httpExample.internal</name>\r\n'
+            '<repository><url>https://private.internal/repo</url></repository>\r\n'
+            '<url>https://public.example/repo</url>\r\n'
+            "<repository url='https://private.internal/repo'/>\r\n"
+            '<password>\r\nfixture-password\r\n</password>\r\n'
+            '<configuration password="attribute-password"/>\r\n'
+            '</project>\r\n'
+        )
+        patterns = [re.compile(r"^(password|url)$", re.I)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pom.xml"
+            path.write_bytes(original.encode())
+            redact_file(path, patterns, Pseudonymizer(b"test", {"public.example"}), Counter())
+            result = path.read_bytes().decode()
+            for value in ["org.apache.maven.plugins.shade.resource.ManifestResourceTransformer",
+                          "com.example.Main", "1.2.3", "${repository.url}",
+                          "httpExample.internal", "https://public.example/repo"]:
+                self.assertIn(value, result)
+            for value in ["private.internal", "fixture-password", "attribute-password"]:
+                self.assertNotIn(value, result)
+            self.assertIn("REDACTED_SECRET", result)
+            self.assertNotIn("\n", result.replace("\r\n", ""))
+
     def test_regression(self):
         """Maven groupId coordinates remain intact without exempting the whole POM."""
         import importlib.util

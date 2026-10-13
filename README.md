@@ -132,7 +132,7 @@ Bundled defaults live in `safe_repo_export/policies/` and are included in the wh
 
 ## Redaction and scanning
 
-Configuration (YAML, JSON, XML, properties, INI, TOML and related formats) uses strict key redaction and deterministic pseudonyms for URLs, IPs, domains and contextual identifiers. Public-host exceptions apply to configuration URL keys as well as ordinary URLs. Credentials, URL userinfo/query strings and webhook fields remain redacted. Maven `pom.xml` group IDs retain their original coordinates.
+Configuration (YAML, JSON, XML, properties, INI, TOML and related formats) uses strict key redaction and deterministic pseudonyms for URLs, IPs, domains and contextual identifiers. Public-host exceptions apply to configuration URL keys as well as ordinary URLs. Credentials, URL userinfo/query strings and webhook fields remain redacted. Maven `pom.xml` uses a narrower policy: only explicit `http://` and `https://` URLs are treated as URLs; other element and attribute values are redacted when their keys match sensitive-key rules. Maven group IDs, Java class names, dependency coordinates and URL property references retain their original values. Public-host exceptions still apply to HTTP(S) URLs.
 
 Source code uses narrower credential-literal rules for Java, JS/TS, Python, Go, Kotlin, Rust, C/C++, Shell and other supported extensions. Business constants, addresses, hashes and protocol topics are retained. Explicit credential literals and recognizable private-key blocks, JWTs, Telegram tokens, AWS access keys, GitHub tokens, Slack tokens and URLs containing user credentials are redacted. Keyword and regex definitions are preserved unless they contain a recognized actual secret format.
 

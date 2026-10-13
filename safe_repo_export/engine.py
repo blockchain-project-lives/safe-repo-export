@@ -562,6 +562,44 @@ def redact_generic_text(text: str, key_patterns: list[re.Pattern[str]], pseudony
     return "".join(lines)
 
 
+def redact_pom_text(text: str, key_patterns: list[re.Pattern[str]], pseudonymizer: Pseudonymizer) -> str:
+    """Preserve Maven identifiers; redact explicit HTTP(S) URLs and keyed values."""
+    def keyed_value(key: str, value: str) -> str:
+        if not is_sensitive_key(key.split(":")[-1], key_patterns):
+            return value
+        # URL properties can be Maven expressions or non-URL build identifiers.
+        normalized = normalize_key(key)
+        if re.search(r"url|uri|endpoint|host|jdbc", normalized):
+            if not SOURCE_CREDENTIAL_RE.search(normalized) and not re.search(r"token|webhook|authorization", normalized):
+                return value
+        pseudonymizer.counts["sensitive_key"] += 1
+        return str(replacement_for_key(key, value, pseudonymizer))
+
+    def element_sub(match: re.Match[str]) -> str:
+        return match["open"] + keyed_value(match["key"], match["value"]) + match["close"]
+
+    # Match leaf elements only, including multiline values, without rewriting XML.
+    text = re.sub(
+        r'(?P<open><(?P<key>[A-Za-z_][\w.:-]*)(?:\s[^<>]*?)?>)'
+        r'(?P<value>[^<]*)(?P<close></(?P=key)\s*>)', element_sub, text,
+    )
+
+    def tag_sub(match: re.Match[str]) -> str:
+        def attribute_sub(attribute: re.Match[str]) -> str:
+            return (attribute["prefix"] + attribute["quote"] +
+                    keyed_value(attribute["key"], attribute["value"]) + attribute["quote"])
+        return re.sub(
+            r'(?P<prefix>(?P<key>[A-Za-z_][\w.:-]*)\s*=\s*)(?P<quote>["\'])'
+            r'(?P<value>.*?)(?P=quote)', attribute_sub, match.group(0), flags=re.S,
+        )
+
+    text = re.sub(r'<[A-Za-z_][^<>]*>', tag_sub, text)
+    return re.sub(
+        r"\bhttps?://[^\s<>\"']+",
+        lambda match: pseudonymizer.url(match.group(0)), text, flags=re.I,
+    )
+
+
 def redact_file(path: Path, key_patterns: list[re.Pattern[str]], pseudonymizer: Pseudonymizer, counts: Counter[str]) -> None:
     # Policy/list text is executable matching configuration, not application data.
     # Preserve bytes exactly, including regex escapes and original source lines.
@@ -613,10 +651,13 @@ def redact_file(path: Path, key_patterns: list[re.Pattern[str]], pseudonymizer: 
         text, removed = strip_sql_dml(text)
         counts["sql_data_statements_removed"] += removed
 
-    if path.suffix.lower() in {".yml", ".yaml", ".properties", ".xml", ".conf", ".cfg", ".ini", ".toml"}:
+    if path.name == "pom.xml":
+        text = redact_pom_text(text, key_patterns, pseudonymizer)
+    elif path.suffix.lower() in {".yml", ".yaml", ".properties", ".xml", ".conf", ".cfg", ".ini", ".toml"}:
         text = replace_config_lines(text, key_patterns, pseudonymizer)
 
-    text = redact_generic_text(text, key_patterns, pseudonymizer)
+    if path.name != "pom.xml":
+        text = redact_generic_text(text, key_patterns, pseudonymizer)
     for placeholder, element in protected_group_ids.items():
         text = text.replace(placeholder, element)
     if text != original:
