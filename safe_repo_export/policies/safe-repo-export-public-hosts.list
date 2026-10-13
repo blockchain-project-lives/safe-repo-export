@@ -21,3 +21,32 @@ schemas.xmlsoap.org
 mvnrepository.com
 learnmeabitcoin.com
 google.aip.dev
+
+# Public package repository service hosts
+central.sonatype.com
+repository.apache.org
+repo.spring.io
+plugins.gradle.org
+plugins-artifacts.gradle.org
+services.gradle.org
+downloads.gradle.org
+pypi.org
+files.pythonhosted.org
+registry.npmjs.org
+registry.yarnpkg.com
+registry.npmmirror.com
+api.nuget.org
+index.crates.io
+static.crates.io
+proxy.golang.org
+sum.golang.org
+repo.packagist.org
+
+# Public documentation service hosts
+docs.github.com
+docs.python.org
+packaging.python.org
+pip.pypa.io
+docs.npmjs.com
+doc.rust-lang.org
+www.rfc-editor.org
