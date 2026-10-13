@@ -2,6 +2,28 @@ import unittest
 
 
 class TestSourceRedaction(unittest.TestCase):
+    def test_string_lists_preserved_and_sensitive_map_values_redacted(self):
+        from safe_repo_export.engine import Pseudonymizer, redact_source_text
+        examples = [
+            'Arrays.asList("second", "secret", "section", "security");',
+            'String[] words = {"secret", "section", "password", "pattern"};',
+            'words = ["secret", "section", "password", "pattern"]',
+            'const words = ["secret", "section", "password", "pattern"];',
+        ]
+        for text in examples:
+            with self.subTest(text=text):
+                self.assertEqual(redact_source_text(text, Pseudonymizer(b"test", set())), text)
+        for text in [
+            'headers.put("secret", "sensitive-value");',
+            'settings = {"name": "example", "secret": "sensitive-value"}',
+            "settings = {'secret': 'sensitive-value'}",
+            'String password = "sensitive-value";',
+        ]:
+            with self.subTest(text=text):
+                result = redact_source_text(text, Pseudonymizer(b"test", set()))
+                self.assertNotIn("sensitive-value", result)
+                self.assertIn("REDACTED_SECRET", result)
+
     def test_regression(self):
         import importlib.util,tempfile,re,ast,json
         from pathlib import Path

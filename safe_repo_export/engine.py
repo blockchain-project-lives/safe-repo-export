@@ -151,13 +151,20 @@ def redact_source_text(text: str, pseudonymizer: "Pseudonymizer") -> str:
             r"\b([A-Za-z_][A-Za-z0-9_.]*)\s*(?::\s*[A-Za-z_][A-Za-z0-9_.\[\] |]*)?\s*(?::=|=(?!=))\s*$", prefix
         )
         go_declaration = re.search(r"\b(?:var|const)\s+([A-Za-z_]\w*)\s+string\s*=\s*$", prefix)
+        # Commas pair keys with values only in explicit .put calls.
+        # Object/dict entries require a colon; list items are independent values.
+        put_value = re.search(
+            r'\.put\(\s*["\']([A-Za-z_][A-Za-z0-9_.-]*)["\']\s*,\s*$', prefix
+        )
         keyed_value = re.search(
-            r'(?:\.put\(\s*|[,{]\s*)["\']([A-Za-z_][A-Za-z0-9_.-]*)["\']\s*(?:,|:)\s*$', prefix
+            r'[,{]\s*["\']([A-Za-z_][A-Za-z0-9_.-]*)["\']\s*:\s*$', prefix
         )
         if go_declaration:
             key = go_declaration.group(1)
         elif assignment:
             key = assignment.group(1)
+        elif put_value:
+            key = put_value.group(1)
         elif keyed_value:
             key = keyed_value.group(1)
         if key and is_source_credential_key(key) and value.strip():
