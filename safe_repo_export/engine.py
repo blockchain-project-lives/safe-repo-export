@@ -405,17 +405,43 @@ def redact_json(value: Any, key_patterns: list[re.Pattern[str]], pseudonymizer: 
     return value, False
 
 
-def replace_config_lines(text: str, key_patterns: list[re.Pattern[str]], pseudonymizer: Pseudonymizer) -> str:
+def replace_config_lines(text: str, key_patterns: list[re.Pattern[str]], pseudonymizer: Pseudonymizer, *, yaml: bool = False) -> str:
     output: list[str] = []
-    config_re = re.compile(r"^(?P<indent>\s*(?:#\s*)?)(?P<key>[A-Za-z0-9_.-]{1,160})(?P<sep>\s*[:=]\s*)(?P<value>.*)$")
+    config_re = re.compile(r"^(?P<indent>[ \t]*(?:#[ \t]*)?)(?P<key>[A-Za-z0-9_.-]{1,160})(?P<sep>[ \t]*[:=][ \t]*)(?P<value>.*)$")
     xml_re = re.compile(r"<(?P<key>[A-Za-z0-9_.:-]+)>(?P<value>.*?)</(?P=key)>", re.I)
     for line in text.splitlines(keepends=True):
-        ending = "\n" if line.endswith("\n") else ""
-        body = line[:-1] if ending else line
+        ending = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
+        body = line[:-len(ending)] if ending else line
         match = config_re.match(body)
         if match and is_sensitive_key(match.group("key"), key_patterns):
-            replacement = replacement_for_key(match.group("key"), match.group("value"), pseudonymizer)
-            body = f"{match.group('indent')}{match.group('key')}{match.group('sep')}\"{replacement}\""
+            value = match.group("value")
+            suffix = ""
+            if yaml:
+                # Keep inline comments outside the scalar, respecting quoted '#'.
+                scalar = re.fullmatch(
+                    r'''(?P<value>"(?:\\.|[^"\\])*"|'(?:''|[^'])*'|[^"'].*?)'''
+                    r"(?P<suffix>[ \t]+#.*|[ \t]*)", value,
+                )
+                if scalar:
+                    value, suffix = scalar["value"], scalar["suffix"]
+                stripped = value.strip()
+                empty = not stripped or stripped.startswith("#") or (
+                    len(stripped) >= 2 and stripped[0] == stripped[-1] and
+                    stripped[0] in "\"'" and not stripped[1:-1].strip()
+                )
+                number = re.fullmatch(
+                    r"[+-]?(?:0[xX][0-9a-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|"
+                    r"(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)(?:[eE][+-]?[0-9_]+)?|\.inf|\.nan)",
+                    stripped, re.I,
+                )
+                if empty or number or stripped.lower() in {"true", "false", "null", "~"}:
+                    output.append(body + ending)
+                    continue
+            replacement = replacement_for_key(match.group("key"), value, pseudonymizer)
+            sep = match.group("sep")
+            if yaml and sep.endswith(":"):
+                sep += " "
+            body = f"{match.group('indent')}{match.group('key')}{sep}\"{replacement}\"{suffix}"
             pseudonymizer.counts["sensitive_key"] += 1
         else:
             def xml_sub(xml_match: re.Match[str]) -> str:
@@ -654,7 +680,7 @@ def redact_file(path: Path, key_patterns: list[re.Pattern[str]], pseudonymizer: 
     if path.name == "pom.xml":
         text = redact_pom_text(text, key_patterns, pseudonymizer)
     elif path.suffix.lower() in {".yml", ".yaml", ".properties", ".xml", ".conf", ".cfg", ".ini", ".toml"}:
-        text = replace_config_lines(text, key_patterns, pseudonymizer)
+        text = replace_config_lines(text, key_patterns, pseudonymizer, yaml=path.suffix.lower() in {".yml", ".yaml"})
 
     if path.name != "pom.xml":
         text = redact_generic_text(text, key_patterns, pseudonymizer)
