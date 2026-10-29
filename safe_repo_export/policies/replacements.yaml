@@ -1,0 +1,18 @@
+# Java method-body replacements. Disabled by default.
+# file: relative to repository root.
+# body-file: relative to .safe-repo-export/; must be under stubs/.
+# class: fully qualified class name; nested classes use dots.
+# parameter-types: types exactly as written in Java, ignoring whitespace;
+#                  use [] for a method with no parameters.
+
+# To enable, replace the empty list above with your own rules:
+# replacements:
+#   - file: src/main/java/com/example/FeeService.java
+#     class: com.example.FeeService
+#     method: calculateFee
+#     parameter-types:
+#       - Order
+#       - BigDecimal
+#     body-file: stubs/example-method-body.java.txt
+
+replacements: []

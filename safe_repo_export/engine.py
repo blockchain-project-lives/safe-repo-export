@@ -693,6 +693,29 @@ def redact_file(path: Path, key_patterns: list[re.Pattern[str]], pseudonymizer: 
     counts["files_processed"] += 1
 
 
+# Exempt only a formatting expression whose PEM body is a %s placeholder and
+# whose argument is a variable reference. Literal key material cannot match.
+JAVA_PEM_FORMAT_RE = re.compile(
+    r'\bString\s*\.\s*format\s*\(\s*'
+    r'(?P<header_literal>"(?P<header>-----BEGIN (?P<label>(?:[A-Z0-9]+ )*PRIVATE KEY)-----)\\n")'
+    r'\s*\+\s*"%s\\n"\s*\+\s*"-----END (?P=label)-----"'
+    r'\s*,\s*[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*\s*\)'
+)
+
+
+def harmless_java_pem_headers(text: str) -> set[int]:
+    # Verify that each header is a real source literal, not text embedded in a
+    # comment/string. Match positions rather than suppressing a complete line.
+    literal_starts = {
+        match.start() for match in SOURCE_TOKEN_RE.finditer(text)
+        if match.group("literal") is not None
+    }
+    return {
+        match.start("header") for match in JAVA_PEM_FORMAT_RE.finditer(text)
+        if match.start("header_literal") in literal_starts
+    }
+
+
 def scan_residuals(root: Path, skip_patterns: Iterable[str] = ()) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*")):
@@ -704,15 +727,19 @@ def scan_residuals(root: Path, skip_patterns: Iterable[str] = ()) -> list[dict[s
         if matches_any(relative, skip_patterns):
             continue
         try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+            text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for line_number, line in enumerate(lines, start=1):
+        harmless_headers = harmless_java_pem_headers(text) if path.suffix.lower() == ".java" else set()
+        offset = 0
+        for line_number, line in enumerate(text.splitlines(keepends=True), start=1):
             for rule_name, pattern in RESIDUAL_RULES.items():
                 if is_source_file(path) and rule_name == "unredacted-secret-literal":
                     continue
-                if pattern.search(line):
+                if any(rule_name != "private-key-block" or offset + match.start() not in harmless_headers
+                       for match in pattern.finditer(line)):
                     findings.append({"rule": rule_name, "file": relative, "line": line_number})
+            offset += len(line)
     return findings
 
 
@@ -763,6 +790,9 @@ def command_sanitize(args: argparse.Namespace) -> int:
 
     counts: Counter[str] = Counter()
     filter_tree(root, includes, excludes, counts)
+    before_redaction = getattr(args, "before_redaction", None)
+    if before_redaction is not None:
+        counts["java_method_bodies_replaced"] = before_redaction(root)
     pseudonymizer = Pseudonymizer(salt, public_hosts)
     for path in sorted(root.rglob("*")):
         if path.is_file() and not path.is_symlink():
@@ -883,7 +913,7 @@ def command_finalize(args: argparse.Namespace) -> int:
     lines = [
         "# Safe Repo Export Report",
         "",
-        "The snapshot was created from one Git commit, filtered and sanitized before a new one-commit Git repository was initialized. Original Git history and remotes are absent.",
+        "The snapshot was created from the selected Git input, filtered and sanitized before a new one-commit Git repository was initialized. Original Git history and remotes are absent.",
         "",
         "## Result",
         "",
@@ -908,6 +938,13 @@ def command_finalize(args: argparse.Namespace) -> int:
         lines.extend(f"| {key} | {value} |" for key, value in sorted(redactions.items()))
     else:
         lines.append("| none | 0 |")
+    if state.get("replacements"):
+        lines.extend(["", "## Java method replacements", "",
+                      "Original bodies and private replacement inputs are not included.", "",
+                      "| Rule | File | Replaced bodies |", "|---|---|---:|"])
+        for item in state["replacements"]:
+            filename = item["file"].replace("|", "\\|").replace("`", "")
+            lines.append(f"| {item['rule']} | {filename} | {item['count']} |")
     lines.extend([
         "",
         "## Limitations",

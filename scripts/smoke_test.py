@@ -24,10 +24,19 @@ with tempfile.TemporaryDirectory(prefix="export-installed-") as temporary:
     subprocess.run([sys.executable, "-I", "-m", "safe_repo_export", "init-policies"], cwd=root, check=True)
     policies = root / ".safe-repo-export"
     assert len(list(policies.glob("*.list"))) == 6, "Packaged policies missing"
+    assert (policies / "replacements.yaml").is_file(), "Packaged replacement demo missing"
+    assert (policies / "stubs/example-method-body.java.txt").is_file(), "Packaged stub missing"
     repo = root / "project"
     repo.mkdir()
     (repo / "app.py").write_bytes(b'api_key = "example-credential"\n')
     (repo / "settings.toml").write_bytes(b'password = "example-credential"\n')
+    (repo / "Example.java").write_bytes(b'class Example { int calculate(int value) { return value + 999; } }\n')
+    (repo / ".safe-repo-export/stubs").mkdir(parents=True)
+    (repo / ".safe-repo-export/replacements.yaml").write_text(
+        'replacements:\n  - file: Example.java\n    class: Example\n    method: calculate\n'
+        '    parameter-types:\n      - int\n    body-file: stubs/example.java.txt\n', encoding="utf-8",
+    )
+    (repo / ".safe-repo-export/stubs/example.java.txt").write_bytes(b'return 42;\n')
     def git(*command):
         subprocess.run(["git", "-C", str(repo), *command], check=True, stdout=subprocess.DEVNULL)
     git("init", "-q")
@@ -42,6 +51,10 @@ with tempfile.TemporaryDirectory(prefix="export-installed-") as temporary:
     assert "example-credential" not in (output / "app.py").read_text()
     assert "example-credential" not in (output / "settings.toml").read_text()
     assert (root / "export.zip").is_file()
+    assert "return 42;" in (output / "Example.java").read_text()
+    assert "999" not in (output / "Example.java").read_text()
+    assert not (output / ".safe-repo-export/replacements.yaml").exists()
+    assert not (output / ".safe-repo-export/stubs").exists()
     subprocess.run([sys.executable, "-I", "-c", "from importlib.metadata import distribution; "
                     f"d = distribution({package_name!r}); assert d.version == {version!r}; "
                     "assert not d.requires; print('Installed wheel has no runtime Python dependencies')"], cwd=root, check=True)

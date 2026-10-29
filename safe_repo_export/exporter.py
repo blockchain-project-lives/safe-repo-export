@@ -19,7 +19,7 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from . import engine
+from . import engine, replacements
 
 LOG = logging.getLogger(__name__)
 POLICIES = {
@@ -410,6 +410,25 @@ def export(args) -> Path:
                 candidate = transaction / "candidate"
                 candidate.mkdir()
                 policies = resolve_policies(args, repo, commit, transaction)
+                def read_replacement_input(name: str) -> bytes | None:
+                    if args.worktree:
+                        return replacements.read_worktree(repo, name)
+                    for parent in PurePosixPath(name).parents:
+                        if str(parent) == ".":
+                            continue
+                        ancestor = git(repo, "ls-tree", commit, "--", parent.as_posix())
+                        if ancestor and ancestor.split(b" ", 1)[0] != b"040000":
+                            raise ExportError("Replacement input parents must be ordinary directories")
+                    entry = git(repo, "ls-tree", commit, "--", name)
+                    if not entry:
+                        return None
+                    if entry.split(b" ", 1)[0] not in {b"100644", b"100755"}:
+                        raise ExportError("Replacement inputs must be regular files")
+                    return git(repo, "show", f"{commit}:{name}")
+                replacement_rules = replacements.load_rules(read_replacement_input)
+                for rule in replacement_rules:
+                    if engine.matches_any(rule.file, engine.read_list(policies["skip_list"])):
+                        raise ExportError("Replacement targets cannot be exempt from redaction and scanning")
                 engine.command_generate_salt(argparse.Namespace(output=str(salt)))
                 executables: set[str] = set()
                 if args.worktree:
@@ -419,6 +438,11 @@ def export(args) -> Path:
                     git(repo, "archive", "--format=tar", f"--output={snapshot}", commit)
                     skipped_links = extract_snapshot(snapshot, candidate, executables)
                     snapshot.unlink()
+                replacements.remove_private_inputs(candidate)
+                replacement_records = []
+                def replace_methods(root: Path) -> int:
+                    replacement_records.extend(replacements.apply_rules(root, replacement_rules))
+                    return len(replacement_records)
                 state = transaction / "sanitize-state.json"
                 LOG.info("Filtering and sanitizing %s", "working tree" if args.worktree else "selected commit")
                 result = engine.command_sanitize(argparse.Namespace(
@@ -427,12 +451,15 @@ def export(args) -> Path:
                     public_hosts=str(policies["public_hosts"]), salt_file=str(salt), state=str(state),
                     gitleaks_ignore=str(policies["gitleaks_ignore"]),
                     ignore_state=str(transaction / "gitleaks-ignore-state.json"),
+                    before_redaction=replace_methods,
                 ))
                 if result:
                     raise ExportError("Built-in residual-secret scan blocked export")
-                if skipped_links:
+                if skipped_links or replacement_records:
                     data = json.loads(state.read_text(encoding="utf-8"))
-                    data["counts"]["unsafe_symlink_removed"] = skipped_links
+                    if skipped_links:
+                        data["counts"]["unsafe_symlink_removed"] = skipped_links
+                    data["replacements"] = replacement_records
                     state.write_bytes((json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
                 status = run_gitleaks(args, candidate, transaction, policies)
                 engine.command_finalize(argparse.Namespace(

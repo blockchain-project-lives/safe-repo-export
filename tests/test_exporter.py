@@ -119,6 +119,15 @@ class ExportTests(unittest.TestCase):
                 self.assertFalse(any(".git" in Path(name).parts for name in names))
                 self.assertFalse(any("pseudonym-salt" in name for name in names))
 
+    def test_java_pem_formatting_template_exports_without_source_changes(self):
+        from test_pem_format import FORMAT
+        original = 'class Pem { String wrap(String privatekeyBase64) {\n' + FORMAT + '\nreturn result; } }\n'
+        self.write("src/Pem.java", original.encode())
+        self.git("add", "src/Pem.java")
+        export(self.args("--worktree"))
+        self.assertEqual((self.output / "src/Pem.java").read_text(), original)
+        self.assertEqual((self.repo / "src/Pem.java").read_text(), original)
+
     def test_dirty_worktree_and_selected_ref(self):
         previous = self.git("rev-parse", "HEAD")
         self.write("src/app.py", b"value = 2\n")
@@ -171,6 +180,90 @@ class ExportTests(unittest.TestCase):
         (self.repo / "src").symlink_to(outside, target_is_directory=True)
         export(self.args("--worktree"))
         self.assertFalse((self.output / "src/app.py").exists())
+
+    def prepare_java_replacement(self):
+        self.write("src/Fee.java", b'package demo; class Fee { int fee(int amount) { return originalCore(amount); } int fee() { return 7; } }\n')
+        self.write(".safe-repo-export/replacements.yaml", (
+            'replacements:\n  - file: src/Fee.java\n    class: demo.Fee\n    method: fee\n'
+            '    parameter-types:\n      - int\n    body-file: stubs/fee.java.txt\n'
+        ).encode())
+        self.write(".safe-repo-export/stubs/fee.java.txt", b'// PRIVATE_TEMPLATE_MARKER\nreturn 42;\n')
+        self.commit()
+
+    def test_java_replacements_use_selected_ref_hide_inputs_and_preserve_source(self):
+        self.prepare_java_replacement()
+        self.write(".safe-repo-export/stubs/fee.java.txt", b'return 99;\n')
+        before = self.git("status", "--porcelain")
+        export(self.args("--allow-dirty", "--archive", "zip"))
+        result = (self.output / "src/Fee.java").read_text()
+        self.assertIn("return 42", result)
+        self.assertIn("return 7", result)
+        self.assertNotIn("originalCore", result)
+        self.assertFalse((self.output / ".safe-repo-export/replacements.yaml").exists())
+        self.assertFalse((self.output / ".safe-repo-export/stubs").exists())
+        report = (self.output / ".safe-repo-export/EXPORT-REPORT.md").read_text()
+        self.assertIn("Java method replacements", report)
+        self.assertIn("src/Fee.java", report)
+        self.assertNotIn("originalCore", report)
+        self.assertNotIn("PRIVATE_TEMPLATE_MARKER", report)
+        self.assertIn("originalCore", (self.repo / "src/Fee.java").read_text())
+        self.assertEqual(self.git("status", "--porcelain"), before)
+        with zipfile.ZipFile(f"{self.output}.zip") as archive:
+            self.assertFalse(any("stubs/" in name or "replacements.yaml" in name for name in archive.namelist()))
+        export(self.args("--worktree", "--replace"))
+        self.assertIn("return 99", (self.output / "src/Fee.java").read_text())
+        verify_manifest(self.output)
+
+    def test_failed_replacement_preserves_previous_output_and_existing_salt(self):
+        self.prepare_java_replacement()
+        export(self.args())
+        original = (self.output / "src/Fee.java").read_bytes()
+        salt = Path(f"{self.output}.pseudonym-salt").read_bytes()
+        self.write("src/Fee.java", b'package demo; class Fee { int renamed(int amount) { return 99; } }\n')
+        with self.assertRaisesRegex(ValueError, "match exactly"):
+            export(self.args("--worktree", "--replace"))
+        self.assertEqual((self.output / "src/Fee.java").read_bytes(), original)
+        self.assertEqual(Path(f"{self.output}.pseudonym-salt").read_bytes(), salt)
+
+    def test_replacement_target_excluded_or_exempt_blocks_export(self):
+        self.prepare_java_replacement()
+        self.write(".safe-repo-export/safe-repo-export-exclude.list", b'src/Fee.java\n')
+        with self.assertRaisesRegex(ValueError, "missing or excluded"):
+            export(self.args("--worktree"))
+        self.assertFalse(self.output.exists())
+        self.assertFalse(Path(f"{self.output}.pseudonym-salt").exists())
+        (self.repo / ".safe-repo-export/safe-repo-export-exclude.list").unlink()
+        self.write(".safe-repo-export/safe-repo-export-sanitize-skip.list", b'src/Fee.java\n')
+        with self.assertRaisesRegex(ExportError, "exempt"):
+            export(self.args("--worktree"))
+
+    def test_disabled_replacements_still_remove_private_inputs(self):
+        self.write(".safe-repo-export/replacements.yaml", b'replacements: []\n')
+        self.write(".safe-repo-export/stubs/nested/private.java.txt", b'privateBusinessDetails();\n')
+        self.commit()
+        export(self.args())
+        self.assertFalse((self.output / ".safe-repo-export/replacements.yaml").exists())
+        self.assertFalse((self.output / ".safe-repo-export/stubs").exists())
+
+    def test_stub_contents_are_redacted_after_replacement(self):
+        self.prepare_java_replacement()
+        self.write(".safe-repo-export/stubs/fee.java.txt", b'String apiKey = "fixture-template-secret";\nreturn 42;\n')
+        export(self.args("--worktree"))
+        content = (self.output / "src/Fee.java").read_text()
+        self.assertNotIn("fixture-template-secret", content)
+        self.assertIn("REDACTED_SECRET", content)
+
+    @unittest.skipUnless(hasattr(os, "symlink") and os.name != "nt", "POSIX symlink support required")
+    def test_replacement_template_symlink_rejected_in_both_modes(self):
+        self.prepare_java_replacement()
+        target = self.repo / ".safe-repo-export/stubs/fee.java.txt"
+        target.unlink()
+        target.symlink_to(self.repo / "README.md")
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            export(self.args("--worktree"))
+        self.commit()
+        with self.assertRaisesRegex(ExportError, "regular files"):
+            export(self.args())
 
     def test_replace_required_and_preserves_previous_on_conflict(self):
         export(self.args("--archive", "zip"))
@@ -341,6 +434,30 @@ class TransactionTests(unittest.TestCase):
             init_policies(["--directory", str(directory)])
             self.assertEqual(path.read_bytes(), b"src/**\r\n")
             self.assertEqual(len(list(directory.glob("*.list"))), 6)
+            config = directory / "replacements.yaml"
+            stub = directory / "stubs/example-method-body.java.txt"
+            from safe_repo_export.replacements import parse_config
+            self.assertEqual(parse_config(config.read_text()), [])
+            self.assertIn("Export-only mock", stub.read_text())
+            self.assertFalse((directory / "stubs/example-method-body.java").exists())
+            config.write_bytes(b"replacements: []\r\n# user settings\r\n")
+            stub.write_bytes(b"// user-owned template\r\nreturn 7;\r\n")
+            init_policies(["--directory", str(directory)])
+            self.assertEqual(config.read_bytes(), b"replacements: []\r\n# user settings\r\n")
+            self.assertEqual(stub.read_bytes(), b"// user-owned template\r\nreturn 7;\r\n")
+
+
+    @unittest.skipUnless(hasattr(os, "symlink") and os.name != "nt", "POSIX symlink support required")
+    def test_init_does_not_write_through_symlinked_stubs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary) / "policies"
+            outside = Path(temporary) / "outside"
+            directory.mkdir()
+            outside.mkdir()
+            (directory / "stubs").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(ExportError, "symlink"):
+                init_policies(["--directory", str(directory)])
+            self.assertEqual(list(outside.iterdir()), [])
 
 
 class GitleaksTests(unittest.TestCase):

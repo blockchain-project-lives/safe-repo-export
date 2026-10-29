@@ -15,7 +15,7 @@
 ## 根目录便捷入口
 
 - `install.sh` → `install.py`：安装到项目内 `.venv`，管理环境所有权、重复安装检测、验证与失败恢复。
-- `init_lists.sh` → `scripts/init_lists.py`：把六份默认规则写到当前仓库根目录 `.safe-repo-export/`，保留已有文件。
+- `init_lists.sh` → `scripts/init_lists.py`：把六份默认规则及禁用的 Java 替换示例写到当前仓库根目录 `.safe-repo-export/`，保留已有文件。
 - `bump_version.sh` → `scripts/bump_version.py`：增加版本，可附加 `--commit` / `--tag` / `--push`。
 - `commit_and_tag.sh`：保留原来的根目录入口名称，接收 `vX.Y.Z` 和可选消息，仅提交版本文件并打 tag。
 

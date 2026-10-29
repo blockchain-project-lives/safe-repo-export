@@ -1,0 +1,3 @@
+// Export-only mock. Adjust the return type, parameters and side effects.
+// This is not the original business implementation.
+return FeeResult.of(BigDecimal.ZERO);

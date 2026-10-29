@@ -5,7 +5,20 @@
 Versions and dates follow repository tags and commits. A tag records source history, not confirmation of a successful PyPI upload.
 版本与日期以仓库 tag、提交为准；存在 tag 不代表 PyPI 上传已成功。后续每次发布前将未发布条目归入对应版本。
 
-## Unreleased / 未发布
+## 0.1.4 — 2026-10-29
+
+- Fix the built-in scan falsely flagging Java PEM `String.format` assembly with a `%s` body and variable argument; retain detection/redaction of embedded or incomplete private-key material.
+  修复内置扫描将 Java 的 PEM 格式拼接（`%s` 正文、变量参数）误判为私钥的问题，仍处理实际或不完整的私钥内容。
+
+- Use `.java.txt` for generated stub templates and examples to avoid IDE Java syntax errors; keep extension-independent loading and compatibility with existing templates.
+  初始化模板及文档示例统一使用 `.java.txt`，避免 IDE 按完整 Java 文件报错；读取逻辑仍兼容已有扩展名。
+
+- Add Java method-body replacements selected by repository path, qualified class, method and ordered parameter types. Read private templates under `.safe-repo-export/stubs/`, preserve declarations, then redact and scan the replacement output.
+  新增 Java 方法体替换：按仓库路径、完整类名、方法名及参数类型定位，读取 `.safe-repo-export/stubs/` 模板，保留定义并继续脱敏和扫描。
+- Generate disabled YAML/template demos during non-overwriting init; package them in wheel/sdist. Support committed refs and current working rules/templates; fail closed on missing/ambiguous/unsafe inputs. Strip private inputs and report only replacement paths/counts.
+  init 补齐默认禁用的 YAML/模板示例并纳入 wheel/源码包；支持 ref/工作区规则，缺失/歧义/不安全输入阻止导出，移除私有输入，报告只含路径与次数。
+- Remain stdlib-only with restricted YAML and conservative Java lexical matching; document type-matching and syntax limits.
+  保持标准库实现，采用受限 YAML 和保守 Java 词法定位，说明类型匹配和语法限制。
 
 - Add a default-rule guide covering policy precedence, source/config differences, Redis keys, EVM literals and format-specific behavior; link it from both READMEs.
   新增默认规则说明，涵盖优先级、源码/配置差异、Redis key、EVM 字面量及格式专门行为，中英文 README 均引用。

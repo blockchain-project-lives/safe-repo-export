@@ -55,7 +55,9 @@ def validate_install(destination: Path, version: str) -> bool:
         "d = distribution('safe-repo-export'); "
         f"assert d.version == {version!r} and safe_repo_export.__version__ == {version!r}; "
         "assert not d.requires; "
-        "assert len(list((Path(safe_repo_export.__file__).parent / 'policies').glob('*.list'))) == 6"
+        "assert len(list((Path(safe_repo_export.__file__).parent / 'policies').glob('*.list'))) == 6; "
+        "assert (Path(safe_repo_export.__file__).parent / 'policies/replacements.yaml').is_file(); "
+        "assert (Path(safe_repo_export.__file__).parent / 'policies/stubs/example-method-body.java.txt').is_file()"
     )
     try:
         subprocess.run([str(python), "-I", "-c", code], check=True, capture_output=True)

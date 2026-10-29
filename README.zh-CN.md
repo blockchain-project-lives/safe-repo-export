@@ -35,7 +35,7 @@ Windows 路径含空格时加引号，例如 `--repo "C:\Projects\my project"`�
 | 入口 | 用途 |
 |---|---|
 | `safe-repo-export [options]` | 过滤、脱敏、扫描、导出及可选归档 |
-| `safe-repo-export init` / `init-policies` | 生成六份默认规则，不覆盖已有文件 |
+| `safe-repo-export init` / `init-policies` | 生成六份规则和默认禁用的 Java 替换示例，不覆盖已有文件 |
 | `python -m safe_repo_export ...` | 与主命令等价；使用当前 Python 环境 |
 | `python safe_repo_export.py ...` | 源码仓库入口，无需安装 |
 | `safe-repo-export-version ...` | 维护工具自身版本，不用于被导出的项目 |
@@ -94,6 +94,26 @@ regex:assertEquals\(.*\);
 path:tests/fixtures/**
 ```
 
+
+## Java 方法体替换
+
+隐藏指定核心方法实现，同时保留方法定义。`init` 还会在 `.safe-repo-export/` 生成默认禁用的 `replacements.yaml` 和 `stubs/example-method-body.java.txt`。
+
+```yaml
+replacements:
+  - file: src/main/java/com/example/FeeService.java
+    class: com.example.FeeService
+    method: calculateFee
+    parameter-types:
+      - Order
+      - BigDecimal
+    body-file: stubs/calculate-fee.java.txt
+```
+
+在 `.safe-repo-export/stubs/calculate-fee.java.txt` 中只写模拟方法体内容。以文件、完整类名、方法名和有序参数类型精确定位；缺失、重复或不支持的结构阻止导出。默认读所选 ref，`--worktree` 读当前规则和模板；替换后继续脱敏与扫描。规则 YAML 和整个 `stubs/` 强制从正常导出结果移除，报告只记录路径/次数，不记录原代码。
+
+保持标准库实现，采用受限 YAML 和保守 Java 结构识别，不自动编译、不保证业务行为等价。详见 [Java 方法体替换说明](docs/JAVA_REPLACEMENTS.md)，包含配置、类型匹配及首版限制。
+
 ## 导出与脱敏行为
 
 - 默认包含所有已跟踪路径，再移除依赖、构建产物、缓存、本地 `.env`、密钥材料及二进制文件。移除软链接，不导出子模块内容，也不会下载 LFS 对象。
@@ -105,6 +125,8 @@ path:tests/fixtures/**
 - 独立 SQL 文件保留 DDL/注释，移除 INSERT/REPLACE/UPDATE/DELETE/LOAD DATA/COPY 数据语句；MyBatis XML 不当作 SQL dump。
 - 内置残留扫描发现高可信问题时阻止导出，报告不含命中值。Gitleaks 默认仅提示，严格模式会阻止导出。自动规则不是完整语言解析器，分享前应复核报告和保留的配置。
 - 私有盐默认在输出旁的 `OUTPUT.pseudonym-salt`，不进入导出或归档。复用盐可保持假名稳定。Unix 要求 0600；Windows 使用账户/文件系统权限。
+
+Java 中使用 `%s` 正文和变量参数拼接 PEM 的 `String.format` 表达式不再被内置扫描误判；这不是全部 PEM 的豁免，详见 [具体规则](docs/DEFAULT_RULES.md)。
 
 ## 本地源码安装与命令位置
 
@@ -140,9 +162,9 @@ safe-repo-export --version
 
 ```sh
 safe-repo-export-version patch --dry-run
-./bump_version.sh 0.1.4 --push
+./bump_version.sh 0.1.5 --push
 # Windows / cross-platform:
-python scripts/bump_version.py 0.1.4 --push
+python scripts/bump_version.py 0.1.5 --push
 ```
 
 | 参数 | 说明 |

@@ -35,7 +35,7 @@ Quote Windows paths containing spaces, e.g. `--repo "C:\Projects\my project"`. U
 | Entry point | Purpose |
 |---|---|
 | `safe-repo-export [options]` | Filter, redact, scan, export and optionally archive |
-| `safe-repo-export init` / `init-policies` | Write six default policies, preserving existing files |
+| `safe-repo-export init` / `init-policies` | Write six policies and disabled Java replacement demos; preserve existing files |
 | `python -m safe_repo_export ...` | Equivalent CLI using the selected Python environment |
 | `python safe_repo_export.py ...` | Source checkout entry; no installation needed |
 | `safe-repo-export-version ...` | Maintain this toolkit’s version, not the exported project |
@@ -94,6 +94,26 @@ regex:assertEquals\(.*\);
 path:tests/fixtures/**
 ```
 
+
+## Java method-body replacement
+
+Hide selected business implementations while preserving method declarations. `init` also creates disabled `replacements.yaml` and `stubs/example-method-body.java.txt` under `.safe-repo-export/`.
+
+```yaml
+replacements:
+  - file: src/main/java/com/example/FeeService.java
+    class: com.example.FeeService
+    method: calculateFee
+    parameter-types:
+      - Order
+      - BigDecimal
+    body-file: stubs/calculate-fee.java.txt
+```
+
+Put only the mock method-body contents in `.safe-repo-export/stubs/calculate-fee.java.txt`. Rules match exactly one method by path, qualified class, name and ordered textual parameter types; missing/ambiguous/unsupported targets block export. Rules/templates use the selected ref or current files with `--worktree`; replacement precedes redaction/scanning. Private YAML and the whole `stubs/` directory are always removed from normal export output. Reports record paths/counts, not original bodies.
+
+Stdlib only, with restricted YAML and conservative Java structural matching; no automatic compilation or semantic equivalence guarantee. See [Java replacements](docs/JAVA_REPLACEMENTS.md) for syntax, type matching and limits.
+
 ## Export and redaction behavior
 
 - Start with tracked paths; remove dependencies, build outputs, caches, local `.env`, key material and binary files. Remove symlinks, omit submodule contents and do not download LFS objects.
@@ -105,6 +125,8 @@ path:tests/fixtures/**
 - Standalone SQL retains DDL/comments and removes INSERT/REPLACE/UPDATE/DELETE/LOAD DATA/COPY data statements. MyBatis XML is not treated as a SQL dump.
 - High-confidence built-in residual findings block export; reports omit matched values. Gitleaks is advisory unless strict mode is enabled. Rules are not complete language parsers; review reports and retained configuration before sharing.
 - Private salt defaults to adjacent `OUTPUT.pseudonym-salt`, never exported or archived. Reuse it for stable pseudonyms. Unix requires 0600; Windows uses account/filesystem permissions.
+
+Java PEM `String.format` assembly using a `%s` body and a variable argument is preserved by the built-in scan; this is not a general PEM exemption. See [the exact rule](docs/DEFAULT_RULES.md).
 
 ## Local source installation and command locations
 
@@ -140,9 +162,9 @@ Run at this toolkit’s source root or specify `--repo`. This does not upgrade t
 
 ```sh
 safe-repo-export-version patch --dry-run
-./bump_version.sh 0.1.4 --push
+./bump_version.sh 0.1.5 --push
 # Windows / cross-platform:
-python scripts/bump_version.py 0.1.4 --push
+python scripts/bump_version.py 0.1.5 --push
 ```
 
 | Option | Meaning |

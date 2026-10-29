@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Filter and sanitize a Git commit or working tree for sharing or code analysis.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Commands:
-  init                  Write default .list files to the current repository's
+  init                  Write default policies and replacement demos to the current repository's
                         .safe-repo-export/ directory; preserve existing files.
   init-policies         Alias for init.
 
@@ -60,7 +60,7 @@ def default_policy_directory() -> Path:
 def init_policies(argv: list[str], *, prog: str = "safe-repo-export init") -> int:
     parser = argparse.ArgumentParser(
         prog=prog,
-        description="Write the six bundled .list templates; existing files are preserved.",
+        description="Write six .list policies and disabled Java replacement demos; preserve existing files.",
     )
     parser.add_argument(
         "--directory", metavar="PATH",
@@ -71,9 +71,13 @@ def init_policies(argv: list[str], *, prog: str = "safe-repo-export init") -> in
     if destination.is_symlink():
         raise ExportError("Policy directory must not be a symlink")
     destination.mkdir(parents=True, exist_ok=True)
-    for filename in POLICIES.values():
+    for filename in [*POLICIES.values(), "replacements.yaml", "stubs/example-method-body.java.txt"]:
+        path = destination / filename
+        if path.parent.is_symlink() or path.is_symlink():
+            raise ExportError("Policy files and template directories must not be symlinks")
+        path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with (destination / filename).open("xb") as output:
+            with path.open("xb") as output:
                 output.write((DEFAULT_POLICIES / filename).read_bytes())
             print(f"Created policy: {filename}")
         except FileExistsError:

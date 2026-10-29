@@ -9,9 +9,9 @@ This guide describes bundled policies and built-in decisions. File type, field n
 
 1. 选择输入：默认导出 `--ref`（默认 `HEAD`）；`--worktree` 使用已跟踪文件的当前磁盘内容，新文件先 `git add`。
 2. 选择六份规则：显式 CLI 文件 > 仓库 `.safe-repo-export/` 对应文件 > 内置默认文件。默认模式读取所选 commit；`--worktree` 读取工作区规则。
-3. 路径包含/排除 → 跳过规则 → 按文件类型脱敏 → 内置残留扫描 → 可选 Gitleaks → 报告/清单。
+3. 路径包含/排除 → 可选 Java 方法体替换 → 跳过规则 → 按文件类型脱敏 → 内置残留扫描 → 可选 Gitleaks → 报告/清单。
 
-Input selection → policy selection → path filtering → skip rules → file-specific redaction → built-in scan → optional Gitleaks → reports.
+Input selection → policy selection → path filtering → optional Java body replacement → skip rules → file-specific redaction → built-in scan → optional Gitleaks → reports.
 
 每份自定义文件**完整替换**同类默认文件，不是追加。空行及 `#` 开头行忽略；路径区分大小写，统一使用 `/`，`**/` 也能匹配零层目录。`init` 保留已有文件，因此升级工具后，已有仓库规则**不会自动合并新版默认项**。
 Overrides replace a policy completely. Blank/comment lines are ignored. Paths are case-sensitive and use `/`; `**/` also matches zero directories. `init` never overwrites existing files, so upgrading does not merge new defaults into existing repository policies.
@@ -150,6 +150,30 @@ JSON is processed recursively. Sensitive integer/float values become `0`/`0.0`, 
 
 POM avoids generic bare-domain/IP/EVM rules. Explicit HTTP(S) URLs and sensitive leaf-element/attribute values are handled. `groupId` is protected explicitly; ordinary coordinates, class names and URL property references remain intact. Custom key rules may affect other fields.
 
+
+### Java PEM 格式拼接例外 / Java PEM formatting exception
+
+下面这种明确的 `String.format` 三段字符串拼接，正文只有 `%s`，格式参数为变量引用，不含实际私钥内容，因此内置扫描不把该表达式的头部视为私钥残留：
+The built-in scan permits this exact three-literal `String.format` structure: a PEM header, `%s` body, footer and variable-reference argument, with no embedded key payload.
+
+```java
+String result = String.format("-----BEGIN PRIVATE KEY-----\n" +
+        "%s\n" +
+        "-----END PRIVATE KEY-----", privatekeyBase64);
+```
+
+例外仅用于 `.java` 中真实的字符串表达式，支持对应 RSA 等大写标签；不是整个文件或整行的扫描豁免。正文/参数若直接写入 key 字面量、头部不完整或其他位置仍有 PEM 标记，照常处理。实际完整私钥仍脱敏，不完整残留仍拦截。其他 token 规则也照常运行。Gitleaks 独立扫描，若仍误报，需使用 gitleaks-ignore 的精确行规则；不建议因此跳过整个文件。
+The exception is position-specific, not file/line-wide, and does not apply to comments or non-Java files. Embedded payloads, incomplete keys and other markers remain subject to normal checks. Other token rules still apply. Gitleaks may independently require precise line ignores.
+
+针对上述三行代码，可在 `safe-repo-export-gitleaks-ignore.list` 使用以下整行正则。用 `-{5}` 表示五个连字符，避免把原始 PEM 头再次写进规则文件，引发内置扫描。不要同时保留旧的原样 BEGIN 行忽略。
+For these exact three lines, use the full-line regexes below. `-{5}` avoids embedding a literal PEM header in the policy itself. Remove any old exact BEGIN-line ignore.
+
+```text
+regex:String\s+result\s*=\s*String\.format\("-{5}BEGIN PRIVATE KEY-{5}\\n"\s*\+
+regex:"%s\\n"\s*\+
+regex:"-{5}END PRIVATE KEY-{5}",\s*privatekeyBase64\);
+```
+
 ## 5. 其他内置规则与扫描 / Other built-in rules and scanning
 
 - 私钥块、JWT、AWS access key、GitHub/Slack/Telegram token 等可识别格式有独立规则，不能只靠删除 `redact-keys` 某一行来关闭。
@@ -176,3 +200,9 @@ safe-repo-export --worktree --output ../sanitized --replace
 - 查看输出 `.safe-repo-export/EXPORT-REPORT.md`，结合原始差异复核；普通词表、类型等例外不是业务数据全局安全的保证。
 
 Use exclude/include for paths, redact-keys for config fields, public-hosts for public services and Gitleaks-only ignores for scanner false positives. Source credential recognition requires code changes. Review the export report and diff before sharing.
+
+## 7. Java 方法体替换 / Java body replacements
+
+六份 list 之外，`init` 还生成默认禁用的 `replacements.yaml` 和 `stubs/example-method-body.java.txt`。这是独立替换功能：在过滤后、脱敏/扫描前执行，目标不可命中 sanitize-skip；规则 YAML 与整个 stubs 目录强制从正常导出结果移除。配置/类型匹配/首版限制见 [Java 替换说明](JAVA_REPLACEMENTS.md)。
+
+In addition to six lists, init generates disabled replacement demos. Replacement runs after filtering and before redaction/scanning; targets cannot be scan-exempt. Private rule/template inputs are removed from normal exports. See the dedicated guide.
