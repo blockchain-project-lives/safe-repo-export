@@ -1,6 +1,6 @@
 # Safe Repo Export 发布说明
 
-本项目提供可构建的源码及 GitHub 发布工作流，尚未实际上传到 PyPI。初始版本是 `0.1.0`。包实现为纯 Python，构建产物是平台无关的 `py3-none-any.whl` 和源码包。
+本项目提供 PyPI 发布工作流，当前版本以 `safe_repo_export/_version.py` 为准；历史变更见 [CHANGELOG](../CHANGELOG.md)。包实现为纯 Python，构建产物是平台无关的 `py3-none-any.whl` 和源码包。独立测试 workflow 仅手动触发；发布 tag 仍自动执行发布前验证。
 
 ## 名称与唯一版本源
 
@@ -28,7 +28,7 @@
 
 Shell 入口支持 macOS/Linux；Windows 使用 `python install.py` 和 `python scripts/bump_version.py`。安装默认只管理专用 `.venv`，遇到已有未标记环境时停止，请使用 `--venv PATH`。同版本但源码变化会重新安装，源码和有效安装均未变时直接复用；重建成功后清理本次临时备份，失败时恢复旧环境。外部 pip 缓存和下载不会回滚。
 
-## 先验证，再创建仓库
+## 发布前验证
 
 在虚拟环境执行：
 
@@ -42,7 +42,7 @@ python scripts/smoke_test.py --dist dist
 
 旧构建产物应清理后再构建；wheel 验证脚本要求 dist 中只有一个 wheel。验证脚本会安装到当前环境，勿用需要保持不变的 Python 环境。
 
-创建 GitHub 仓库后，把源码、规则、测试和 `.github/workflows/` 一并提交并推送。`workflow_dispatch` 的工作流文件须先存在于默认分支，Actions 页面才会显示手动运行入口。可以在仓库中创建 `pypi` environment，设置适用的发布规则。
+把源码、规则、测试和 `.github/workflows/` 一并提交并推送。发布前将 CHANGELOG 的 Unreleased 条目归入本次版本并填写日期。`workflow_dispatch` 的工作流文件须先存在于默认分支，Actions 页面才会显示手动运行入口。可以在仓库中创建 `pypi` environment，设置适用的发布规则。
 
 ## PyPI 认证（二选一）
 

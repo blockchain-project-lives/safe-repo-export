@@ -1,171 +1,187 @@
 # Safe Repo Export
 
-通用项目过滤导出与脱敏工具。
+[English](README.md) | [简体中文](README.zh-CN.md) | [Changelog / 更新记录](CHANGELOG.md)
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+过滤、脱敏并导出 Git 仓库快照，用于分享或代码分析。Python 3.10+，支持 Windows/macOS/Linux，使用标准库，无运行时 Python 包依赖；需要 Git，Gitleaks 可选。
 
-从任意 Git 项目导出经过过滤、脱敏的提交快照，供分享或代码分析使用。工具全部用 Python 标准库实现，适用于 Windows、macOS 和 Linux，没有运行时 Python 包依赖。需要安装 Git 并加入 PATH；Gitleaks 是可选的额外扫描工具。
+## 安装与快速使用
 
-仓库及 PyPI 包名统一为 `safe-repo-export`，Python 模块为 `safe_repo_export`。首次发布流程见 [发布说明](docs/RELEASING.md)。
-
-## 安装与使用
-
-需要 Python 3.10 或以上。发布到 PyPI 后：
-
-```console
-python -m pip install safe-repo-export
-safe-repo-export --repo /path/to/project --output /path/to/exports/project --archive zip
-```
-
-未安装时，可以直接在本项目目录执行：
-
-```console
-python -m safe_repo_export --repo /path/to/project --output /path/to/exports/project --archive tar.gz
-```
-
-Windows PowerShell / CMD 示例：
-
-```console
-python -m safe_repo_export --repo "C:\Projects\my project" --output "C:\Exports\my project" --archive zip
-```
-
-如果系统命令是 `python3` 或 `py`，将示例中的 `python` 替换即可。核心功能无需 Bash、GNU 工具、Homebrew 组件或外部压缩程序。也可直接使用 `python safe_repo_export.py ...` 源码入口。根目录 Shell 脚本是调用 Python 实现的可选便捷入口。
-
-## 一键本地安装
-
-macOS/Linux 在项目根目录执行：
-
-```console
-./install.sh
-# 新开终端后直接使用
+```sh
+python -m pip install --upgrade safe-repo-export
 safe-repo-export --version
-```
-
-Windows 使用同一套 Python 安装逻辑：
-
-```console
-python install.py
-safe-repo-export --version
-```
-
-PowerShell 激活命令为 `& .venv\Scripts\Activate.ps1`。也可以直接调用 `.venv/bin/` 或 `.venv\Scripts\` 中的命令。
-
-安装脚本管理项目内的专用 `.venv`，验证包、命令和六份内置规则；源码未变且安装正常时，重复执行会跳过重装。已有非本脚本管理的环境会保留，可用 `--venv PATH` 选择其他位置。重建失败时恢复上一次正常环境。构建依赖可能从当前 pip 源下载。
-
-```console
-./install.sh --dry-run
-./install.sh --force
-./install.sh --venv /path/to/dedicated/environment
-```
-
-可通过 `SAFE_REPO_EXPORT_PYTHON` 指定 Python 解释器路径。Shell 入口适用于 macOS/Linux Bash；Windows 直接使用等价 Python 入口。
-
-安装完成后会把 `safe-repo-export`、`safe-repo-export-version` 的用户级入口放到 `~/.local/bin`，必要时配置当前 shell 的 PATH。新终端可直接运行，无需每次激活虚拟环境；当前终端可执行安装输出的 PATH 命令。Windows 会更新用户 PATH，新开终端后使用。已有不属于本工具的同名命令会保留并报冲突。`--commands-dir PATH` 可指定入口位置，`--no-register` 可只安装虚拟环境。
-
-## Usage / 帮助
-
-```console
-safe-repo-export --help
-safe-repo-export init --help
+safe-repo-export init
 safe-repo-export --output ../sanitized --archive zip
 ```
 
-不带参数运行 `safe-repo-export` 也会显示 usage。导出默认使用当前 Git 仓库和 `HEAD`，默认不生成压缩包；必须指定仓库外的 `--output` 目录。
+在目标仓库内执行。默认导出 `HEAD`，规则需要先提交；本地调试无需提交时使用：
 
-## 导出行为
-
-- 只导出指定 `--ref` 的已提交内容，默认 `HEAD`。未跟踪文件和未提交修改不进入结果；`--allow-dirty` 允许工作区有已跟踪修改，但仍只导出提交。
-- 输出目录必须位于源仓库外，也不能是源仓库的父目录。导出不会修改源项目。
-- 默认允许全部已跟踪文件，再排除依赖目录、构建产物、缓存、本地 `.env`、密钥证书、压缩包及二进制文件。规则适用于多种语言，也可通过 include 文件缩小范围。
-- `.github/`、`.idea/`、`.vscode/`、`.safe-repo-export/` 等配置仍受过滤、脱敏规则约束。
-- 所有符号链接都省略，避免链接越界和 Windows 创建符号链接的权限要求。不递归导出子模块，不下载 Git LFS 对象。
-- 输出目录创建新的 Git 仓库，仅含一个脱敏提交，没有原始历史和 remote。ZIP/TAR 只包含脱敏文件和报告，不打包 `.git`。
-- 生成并验证 `.safe-repo-export/MANIFEST.sha256`；可选 ZIP/TAR.GZ 及旁边的 `.sha256` 校验文件。
-- 相同内容重复执行保持不变；不同内容必须加 `--replace`。先检查所有目标是否冲突，再执行替换；普通失败或中断会回滚旧输出和旧压缩包。
-- 使用 Python 标准库调用系统文件锁，进程退出自动释放。目标旁边的隐藏 `.safe-repo-export.*.lock` 文件保留，确保并发进程锁定同一文件。
-
-每个目标使用原子移动，但多个文件整体不构成断电或强制终止后仍保证恢复的事务。
-
-## 自定义规则
-
-在目标仓库里，一键写出六份默认 list：
-
-```console
-safe-repo-export init
+```sh
+safe-repo-export --worktree --output ../sanitized --replace
 ```
 
-目录统一为仓库根目录的 `.safe-repo-export/`，从仓库子目录执行也会定位到根目录。尚未 `git init` 时使用当前目录。已有规则不会覆盖，`init-policies` 保留为别名。可用 `safe-repo-export init --directory /path/to/project/.safe-repo-export` 指定位置。
+`--worktree` 使用磁盘上的最新内容和工作区规则，包括已跟踪文件的修改与删除。新文件先 `git add` 即可；未跟踪文件不导出。不会创建源仓库提交或修改暂存区；导出过程中请避免同时编辑文件。
 
-工具根目录也提供 `./init_lists.sh`，Windows 可直接运行 `python scripts/init_lists.py`。给其他仓库生成规则时，在目标仓库中使用脚本的绝对路径：
-
-```console
-/path/to/safe-repo-export/init_lists.sh
+```sh
+safe-repo-export --ref v0.1.3 --output ../release-export
+safe-repo-export --repo /path/to/project --output /path/to/export --archive tar.gz
 ```
 
-脚本保留调用时的工作目录。生成或修改规则后先提交 Git，再导出，才会使用这些仓库规则。
+Windows 路径含空格时加引号，例如 `--repo "C:\Projects\my project"`。按本机环境将 `python` 换为 `python3` 或 `py`。
 
-| 文件 | 用途 |
+## 命令与模块入口
+
+| 入口 | 用途 |
 |---|---|
-| `safe-repo-export-include.list` | 允许导出的相对路径/通配符，区分大小写 |
-| `safe-repo-export-exclude.list` | 强制排除的相对路径/通配符 |
-| `safe-repo-export-redact-keys.list` | 配置敏感键名正则，不区分大小写 |
-| `safe-repo-export-public-hosts.list` | 可保留的公开主机名 |
-| `safe-repo-export-sanitize-skip.list` | 跳过脱敏、内置扫描和 Gitleaks 的文件 |
-| `safe-repo-export-gitleaks-ignore.list` | 仅忽略 Gitleaks 告警的完整行/正则/路径 |
+| `safe-repo-export [options]` | 过滤、脱敏、扫描、导出及可选归档 |
+| `safe-repo-export init` / `init-policies` | 生成六份默认规则，不覆盖已有文件 |
+| `python -m safe_repo_export ...` | 与主命令等价；使用当前 Python 环境 |
+| `python safe_repo_export.py ...` | 源码仓库入口，无需安装 |
+| `safe-repo-export-version ...` | 维护工具自身版本，不用于被导出的项目 |
+| `python -m safe_repo_export.release ...` | 与版本命令等价 |
 
-优先级：CLI 显式指定文件 > 选定提交中的 `.safe-repo-export/` 文件 > 包内默认规则。每份规则整体替换对应默认文件；空文件表示空列表，空 include 不保留源文件。空行与 `#` 注释忽略。所有平台路径规则统一使用 `/`，`**/` 也能匹配零层目录。默认没有扫描豁免或 Gitleaks 忽略规则。
+## 导出参数（完整）
 
-```console
-safe-repo-export --repo /path/to/project --output /path/to/exports/project --include-list /path/to/include.list --exclude-list /path/to/exclude.list --redact-keys /path/to/keys.list
+| 参数 | 说明 |
+|---|---|
+| `--repo PATH` | 当前目录所属 Git 仓库；可从子目录执行 |
+| `--ref REF` | 已提交的分支、tag 或 commit，默认 HEAD |
+| `--output PATH` | 必填；输出目录必须位于源仓库之外，且不能包含源仓库 |
+| `--worktree` | 导出已跟踪文件的当前内容，包括暂存/未暂存修改和删除；仅支持 HEAD |
+| `--allow-dirty` | 允许源仓库有修改，但仍只导出已提交内容 |
+| `--archive none\|zip\|tar.gz` | 归档格式，默认 none；归档旁生成 .sha256 |
+| `--replace` | 允许替换不同的已有输出和归档，失败时恢复 |
+| `--salt-file PATH` | 持久私有盐，默认 OUTPUT.pseudonym-salt；必须位于源仓库及输出之外 |
+| `--require-gitleaks` | 要求已安装 Gitleaks；发现和扫描错误仍为提示 |
+| `--gitleaks-strict` | 要求 Gitleaks，发现或扫描/报告错误会阻止导出 |
+| `--include-list PATH` | 覆盖包含路径规则 |
+| `--exclude-list PATH` | 覆盖排除路径规则 |
+| `--skip-list PATH` | 覆盖免脱敏/免扫描路径规则 |
+| `--redact-keys PATH` | 覆盖敏感键正则规则 |
+| `--public-hosts PATH` | 覆盖公共主机白名单 |
+| `--gitleaks-ignore PATH` | 覆盖仅针对 Gitleaks 的忽略规则 |
+| `--version` | 显示安装版本 |
+| `-h, --help` | 显示帮助；不带参数也显示帮助 |
+
+`--repo` 不指定时寻找当前目录所属仓库的根目录；相对输出路径按执行命令时的当前目录解析。`--worktree` 只能搭配默认 `HEAD`，不能与其他 `--ref` 混用。
+
+## 规则初始化与优先级
+
+```sh
+safe-repo-export init
+safe-repo-export init --directory /path/to/rules
 ```
 
-include 示例：
+`init` 默认写入当前仓库根目录 `.safe-repo-export/`；仓库子目录也会找到根目录。非 Git 目录则写到当前目录。参数只有 `--directory PATH` 和 `-h/--help`。已有文件保留。
+
+| 文件（均位于 .safe-repo-export/） | 说明 |
+|---|---|
+| `safe-repo-export-include.list` | 区分大小写的路径/通配符；默认 ** |
+| `safe-repo-export-exclude.list` | 始终移除的路径/通配符 |
+| `safe-repo-export-redact-keys.list` | 不区分大小写的敏感键正则 |
+| `safe-repo-export-public-hosts.list` | 可保留的主机名，也匹配其子域名 |
+| `safe-repo-export-sanitize-skip.list` | 跳过脱敏、内置扫描及 Gitleaks 的路径 |
+| `safe-repo-export-gitleaks-ignore.list` | 仅忽略 Gitleaks：整行、regex: 或 path: |
+
+优先级：显式命令行规则文件 > 所选 commit 中的规则（`--worktree` 时为工作区规则）> 包内默认规则。每个文件完整替换同类默认规则；空 include 不保留任何源文件。空行和 `#` 注释忽略；路径统一使用 `/`，`**/` 可匹配零层目录。保留的 `.list` 文件字节不变，但仍受路径过滤及内置扫描约束。
+
+白名单也匹配子域名；带凭据或查询参数的 URL 不因白名单免于脱敏。`sanitize-skip` 同时跳过脱敏和扫描，`gitleaks-ignore` 只影响 Gitleaks。忽略规则示例：
 
 ```text
-src/**
-tests/**
-docs/**
-pyproject.toml
-package.json
-.safe-repo-export/**
-```
-
-包内模板位于 `safe_repo_export/policies/`，随 wheel 一起安装。保留的 `.list` 文件逐字节导出，包括正则转义和 CRLF，仍受路径过滤及内置残留扫描约束。自动生成的报告会替换源 `.safe-repo-export/` 中的同名文件。
-
-## 脱敏与扫描
-
-配置文件（YAML、JSON、XML、properties、INI、TOML 等）按敏感键进行严格脱敏，同时对 URL、IP、域名及上下文标识生成稳定化名。公开主机白名单同时适用于配置 URL 键和普通 URL；带认证信息、查询参数的 URL，以及凭证/webhook 字段仍会脱敏。Maven `pom.xml` 的 `groupId` 保留原坐标。
-
-源码使用较窄的凭证字面量规则，支持 Java、JS/TS、Python、Go、Kotlin、Rust、C/C++、Shell 等扩展名。普通业务常量、地址、哈希、协议 topic 保留；显式凭证字面量，以及可识别的私钥块、JWT、Telegram/AWS/GitHub/Slack token 和带用户凭证的 URL 会脱敏。关键词/正则定义保留，可识别的真实秘密格式仍会处理。
-
-独立 `.sql` 文件保留 DDL 和注释，删除 `INSERT`、`REPLACE`、`UPDATE`、`DELETE`、`LOAD DATA`、`COPY` 数据语句；MyBatis XML 不按 SQL dump 处理。源码脱敏是词法处理，不是各语言的完整语法解析器。
-
-内置高置信度残留扫描发现问题时阻止导出。报告只含规则和位置，不含命中值。分享前检查 `.safe-repo-export/EXPORT-REPORT.md`、配置和保留的规则文件；自动规则无法识别所有业务秘密。
-
-安装 Gitleaks 后自动使用 `gitleaks dir` 额外扫描。默认告警及扫描/报告错误不阻止导出；`--require-gitleaks` 要求已安装，`--gitleaks-strict` 还会阻止剩余告警和扫描/报告错误。安装和命令见 [Gitleaks 官方说明](https://github.com/gitleaks/gitleaks#usage)。
-
-Gitleaks 忽略规则示例：
-
-```text
-# 完整原始行，仅忽略首尾空白
 assertEquals("example", result);
-# 完整行 Python 正则
-regex:assertEquals\(\s*"example"\s*,\s*result\s*\);
-# 仓库相对路径
+regex:assertEquals\(.*\);
 path:tests/fixtures/**
 ```
 
-ignore 只影响 Gitleaks；skip-list 同时豁免脱敏和扫描。多行告警必须每行都匹配才能忽略。直接运行 Gitleaks 不读取本工具规则。
+## 导出与脱敏行为
 
-## 私有盐文件
+- 默认包含所有已跟踪路径，再移除依赖、构建产物、缓存、本地 `.env`、密钥材料及二进制文件。移除软链接，不导出子模块内容，也不会下载 LFS 对象。
+- 输出是独立 Git 仓库，仅含一个脱敏提交，无远端和源历史。归档不含 `.git`；生成 `.safe-repo-export/EXPORT-REPORT.md` 和 `MANIFEST.sha256`。
+- 相同输入及盐重复运行保持输出不变；不同输出需 `--replace`。替换失败会回滚，但不是跨文件的断电安全事务。旁路锁文件会保留，进程退出时释放锁。
+- 配置按敏感键及 URL/IP/域名等规则处理。YAML 数字、布尔、null、空值及仅含空格的引号值保留；替换保留冒号后空格、行尾注释和 CRLF。
+- POM 仅将带 `http://`、`https://` 的内容作为 URL，其他值按敏感键处理。保留 Maven groupId、Java 类名、依赖坐标及 URL 属性引用。
+- 源码采用更窄的凭据规则：保留业务常量、地址、哈希和普通词表；明确的密码字段、Map/字典凭据及可识别 token/私钥仍脱敏。词表里的 `"secret", "section"` 不视为键值对。
+- 独立 SQL 文件保留 DDL/注释，移除 INSERT/REPLACE/UPDATE/DELETE/LOAD DATA/COPY 数据语句；MyBatis XML 不当作 SQL dump。
+- 内置残留扫描发现高可信问题时阻止导出，报告不含命中值。Gitleaks 默认仅提示，严格模式会阻止导出。自动规则不是完整语言解析器，分享前应复核报告和保留的配置。
+- 私有盐默认在输出旁的 `OUTPUT.pseudonym-salt`，不进入导出或归档。复用盐可保持假名稳定。Unix 要求 0600；Windows 使用账户/文件系统权限。
 
-默认持久保存在 `OUTPUT.pseudonym-salt`，位于输出旁边。复用盐文件可保持化名稳定、支持重复导出。可用 `--salt-file` 指定其他位置，但必须在源仓库、输出和压缩包目标之外。盐不会进入导出或压缩包。失败时删除本次新建盐文件，已有盐文件保留。
+## 本地源码安装与命令位置
 
-Unix 权限要求 `0600`；Windows 使用账户/文件系统访问控制，不按 Unix 权限位检查。请私下保存盐文件。
+```sh
+./install.sh                         # macOS/Linux
+python install.py                    # Windows / cross-platform
+./install.sh --venv ../safe-repo-export-env
+```
 
-## 开发、版本与发布
+| 参数 | 说明 |
+|---|---|
+| `--venv PATH` | 专用环境位置，默认项目/.venv |
+| `--commands-dir PATH` | 命令入口目录，默认 ~/.local/bin |
+| `--no-register` | 仅安装环境，不注册命令或 PATH |
+| `--force` | 强制重建安装环境 |
+| `--dry-run` | 只预览目标位置 |
+| `-h, --help` | 显示帮助 |
 
-```console
+安装包位于专用虚拟环境；`~/.local/bin` 的两个命令只是入口，并非安装进系统 Python。必要时配置用户 PATH，新终端可直接调用。环境由安装器管理，源码未变时复用；失败重建恢复旧环境。可用 `SAFE_REPO_EXPORT_PYTHON` 指定 Shell 安装器的解释器。
+
+若 pip 显示新版本但命令仍是旧版，用 `type -a safe-repo-export` 检查入口。切回 pyenv 安装时，可删除安装器入口再刷新：
+
+```sh
+rm -f ~/.local/bin/safe-repo-export ~/.local/bin/safe-repo-export-version
+pyenv rehash
+rehash
+safe-repo-export --version
+```
+
+## 维护版本与发布
+
+在工具自身源码仓库根目录执行，或指定 `--repo`。这不是升级已安装工具的命令；升级用 `python -m pip install --upgrade safe-repo-export`。
+
+```sh
+safe-repo-export-version patch --dry-run
+./bump_version.sh 0.1.4 --push
+# Windows / cross-platform:
+python scripts/bump_version.py 0.1.4 --push
+```
+
+| 参数 | 说明 |
+|---|---|
+| `patch / minor / major / X.Y.Z` | 位置参数：自增或指定更大的稳定版本号 |
+| `--repo PATH` | 工具自身源码根目录，默认当前目录；不自动寻找根目录 |
+| `--commit` | 仅提交版本源文件，要求工作区干净 |
+| `--tag` | 隐含 --commit，并创建注释 tag vX.Y.Z |
+| `--push` | 隐含 --tag，原子推送分支和 tag |
+| `--remote NAME` | 推送远端，默认 origin |
+| `--message TEXT` | 自定义提交和 tag 消息 |
+| `--dry-run` | 预览，不修改文件 |
+| `--check-tag vX.Y.Z` | 只校验 tag 与包版本；不能与版本变更/发布参数混用 |
+| `-h, --help` | 显示帮助 |
+
+根目录入口：`bump_version.sh` 委托给 `scripts/bump_version.py`；`commit_and_tag.sh vX.Y.Z [MESSAGE] [--push]` 支持显式版本；`init_lists.sh`（Windows：`python scripts/init_lists.py`）保留调用者目录并初始化规则。
+
+独立 Tests and package workflow 仅手动触发，push/PR 不运行。推送 `v*` tag 自动触发发布，保留三平台 × Python 3.10/3.14 的发布前测试、构建和安装验证。也可手动发布已有 tag。详见 [发布说明](docs/RELEASING.md) 和 [更新记录](CHANGELOG.md)。
+
+## 高级流水线子命令
+
+普通导出会自动调用这些步骤；通常无需单独执行。以下列出所有必填参数，每个命令均支持 `-h/--help`。
+
+| 命令 | 必填参数 | 用途 |
+|---|---|---|
+| `safe-repo-export generate-salt` | `--output PATH` | 生成/验证私有盐文件 |
+| `safe-repo-export sanitize` | `--root PATH, --include PATH, --exclude PATH, --redact-keys PATH, --public-hosts PATH, --salt-file PATH, --state PATH` | 过滤、脱敏并写状态；直接修改 --root |
+| `safe-repo-export summarize-gitleaks` | `--input PATH` | 汇总 Gitleaks JSON 报告 |
+| `safe-repo-export finalize` | `--root PATH, --state PATH, --gitleaks-status TEXT` | 生成导出报告和校验清单 |
+
+可选参数：
+
+- `sanitize`: `--skip-list PATH`, `--gitleaks-ignore PATH`, `--ignore-state PATH`.
+- `summarize-gitleaks`: `--root PATH`, `--skip-list PATH`, `--ignore-state PATH`, `--summary PATH`.
+- `finalize`: `--gitleaks-summary PATH`.
+
+其中 `--state` / `--ignore-state` 是流水线 JSON 状态文件；`--input` 是 Gitleaks JSON 报告，`--summary` 是汇总输出，`--gitleaks-summary` 读取该汇总，`--gitleaks-status` 是写入报告的状态文本。
+
+## 开发验证
+
+```sh
 python -m unittest discover -s tests -v
 python -m pip install build twine
 python -m build
@@ -173,26 +189,4 @@ python -m twine check dist/*
 python scripts/smoke_test.py --dist dist
 ```
 
-安装验证脚本会把 wheel 安装到当前 Python 环境，再离开源码目录验证，建议在虚拟环境执行。CI 配置 Windows/macOS/Linux × Python 3.10/3.14 测试及 wheel 安装验证。
-
-一键版本更新：
-
-```console
-python scripts/bump_version.py patch --dry-run
-python scripts/bump_version.py patch
-python scripts/bump_version.py minor --tag
-python scripts/bump_version.py patch --push
-```
-
-根目录也提供版本更新与发布的 Shell 入口：
-
-```console
-./bump_version.sh patch --dry-run
-./bump_version.sh patch
-./bump_version.sh patch --push
-./commit_and_tag.sh v0.1.1 "Release v0.1.1"
-```
-
-`commit_and_tag.sh` 已恢复在根目录，接收显式版本（可带 `v`）和可选消息，自动提交版本并创建带注释的 tag；加 `--push` 可一并推送。两个 Shell 入口都支持从其他工作目录调用，实际逻辑交给 `scripts/bump_version.py`，无需先安装项目。
-
-支持 `patch`、`minor`、`major` 或显式 `X.Y.Z`。不带 Git 选项只修改唯一版本源；`--tag` 自动提交版本并生成 `vX.Y.Z` tag；`--push` 自动提交、打 tag，并原子推送当前分支和该 tag。发布 workflow 支持推送 `v*` 自动触发，或手动选择已存在的 tag。首次发布、认证配置和改名见 [RELEASING.md](docs/RELEASING.md)。
+请在测试虚拟环境执行 smoke test：它会安装 wheel 到当前 Python。构建前清理旧 dist，确保其中只有一个 wheel。源码更改需在下一次发布后才进入 PyPI 包。

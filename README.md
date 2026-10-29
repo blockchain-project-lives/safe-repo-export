@@ -1,182 +1,187 @@
 # Safe Repo Export
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md) | [Changelog / 更新记录](CHANGELOG.md)
 
-Export a filtered, sanitized snapshot of any Git project for sharing or code analysis. The implementation uses Python's standard library, works on Windows, macOS and Linux, and has no runtime Python package dependencies. Git must be installed and available on PATH. Gitleaks is optional.
+Export filtered, sanitized Git snapshots for sharing or code analysis. Python 3.10+, Windows/macOS/Linux, standard library only and no runtime Python package dependencies. Git is required; Gitleaks is optional.
 
-The repository and PyPI package are named `safe-repo-export`; the Python module is `safe_repo_export`. See [release instructions](docs/RELEASING.md) before the first PyPI release.
+## Install and quick start
 
-## Install and run
-
-Requires Python 3.10 or newer. After publication:
-
-```console
-python -m pip install safe-repo-export
-safe-repo-export --repo /path/to/project --output /path/to/exports/project --archive zip
-```
-
-From a source checkout, without installation:
-
-```console
-python -m safe_repo_export --repo /path/to/project --output /path/to/exports/project --archive tar.gz
-```
-
-Windows example (PowerShell or Command Prompt):
-
-```console
-python -m safe_repo_export --repo "C:\Projects\my project" --output "C:\Exports\my project" --archive zip
-```
-
-Use `python3` on Unix or `py` on Windows if that is your Python command. The core needs no Bash, GNU utilities, Homebrew packages or external archive tool. `python safe_repo_export.py ...` is also available as a source entry point. Optional root Shell scripts are convenience wrappers around the Python implementation.
-
-## One-command local installation
-
-On macOS/Linux, run from the repository root:
-
-```console
-./install.sh
-# Open a new terminal after installation
+```sh
+python -m pip install --upgrade safe-repo-export
 safe-repo-export --version
-```
-
-On Windows, run the same installer through Python:
-
-```console
-python install.py
-safe-repo-export --version
-```
-
-PowerShell activation: `& .venv\Scripts\Activate.ps1`. You can also run the command directly from `.venv/bin/` or `.venv\Scripts\`.
-
-The installer owns a dedicated `.venv` inside this project, verifies the package/CLI and all bundled policies, and skips reinstalling unchanged source. It preserves unmanaged environments; use `--venv PATH` to choose another destination. A failed rebuild restores the previous managed environment. Build dependencies may be downloaded from the configured pip index. Useful options:
-
-```console
-./install.sh --dry-run
-./install.sh --force
-./install.sh --venv /path/to/dedicated/environment
-```
-
-Set `SAFE_REPO_EXPORT_PYTHON` to an interpreter path to select Python explicitly. The Shell entries support macOS/Linux Bash; Windows has equivalent Python entries.
-
-Installation registers `safe-repo-export` and `safe-repo-export-version` in `~/.local/bin` and configures the current shell startup PATH when needed. New terminals can run the commands without activating the environment; use the printed PATH command for the current terminal. Windows updates the user PATH for new terminals. Unmanaged commands are preserved and reported as conflicts. Use `--commands-dir PATH` to select a launcher directory or `--no-register` for an environment-only install.
-
-## Usage
-
-```console
-safe-repo-export --help
-safe-repo-export init --help
+safe-repo-export init
 safe-repo-export --output ../sanitized --archive zip
 ```
 
-For local debugging without committing source changes:
+Run inside the target repository. Default export uses `HEAD` and committed policies. For local debugging without committing:
 
 ```sh
 safe-repo-export --worktree --output ../sanitized --replace
 ```
 
-To export a committed branch, tag or commit:
+`--worktree` reads current disk contents and working-tree policies, including edits/deletions of tracked files. Stage new files with `git add` to include them; untracked files are excluded. It creates no source commit and does not change the index. Avoid editing files during export.
 
 ```sh
-safe-repo-export --ref v1.0.0 --output ../sanitized
+safe-repo-export --ref v0.1.3 --output ../release-export
+safe-repo-export --repo /path/to/project --output /path/to/export --archive tar.gz
 ```
 
-Running `safe-repo-export` with no arguments also prints usage. Export defaults to the current Git repository and `HEAD`, with no archive; `--output` is required and must be outside the source repository.
+Quote Windows paths containing spaces, e.g. `--repo "C:\Projects\my project"`. Use `python3` or `py` instead of `python` where appropriate.
 
-## Export behavior
+## Commands and module entry points
 
-- Export the selected committed `--ref` (default `HEAD`), including its committed policies. `--allow-dirty` permits tracked edits without exporting them.
-- Use `--worktree` to export current tracked files, including staged/unstaged edits and deletions, with current working-tree policies. Stage new files with `git add` to include them; untracked files remain excluded. This mode requires `HEAD`, does not change the source index or create a source commit, and runs the same filtering and redaction pipeline. Avoid editing files while a worktree export is running.
-- Output must be outside the source repository and must not contain it. The source tree is unchanged.
-- Include all tracked paths by default, then exclude dependencies, build artifacts, caches, local `.env` files, key material, archives and binaries. These defaults work across project languages; use a narrower include policy when needed.
-- Retain automation and IDE configuration, including `.github/`, `.idea/`, `.vscode/` and `.safe-repo-export/`, subject to filtering and sanitization.
-- Remove all symlinks and omit submodule contents. This avoids link traversal and Windows symlink privilege requirements. A Git archive does not download submodules or Git LFS objects.
-- Produce an output directory with a new, clean Git repository containing one sanitized commit and no remotes. ZIP/TAR archives contain the sanitized files and reports without `.git` internals.
-- Verify `.safe-repo-export/MANIFEST.sha256`, create an optional deterministic archive and an adjacent `.sha256` file.
-- Identical reruns leave the output and archive unchanged. Differing destinations require `--replace`. All destination conflicts are checked before installation; failures during replacement restore previous destinations.
-- Use OS file locks implemented through Python's standard library. Hidden `.safe-repo-export.*.lock` files remain beside destinations so concurrent processes keep locking the same file. Locks release when a process exits.
-
-Replacement uses atomic moves for each destination, with rollback on an ordinary failure or interrupt; it is not a crash-proof transaction across multiple files.
-
-## Policies
-
-In the target repository, write all six default list templates with one command:
-
-```console
-safe-repo-export init
-```
-
-The destination is `.safe-repo-export/` at the current Git repository root, even when called from a subdirectory. Before `git init`, it uses the current directory. Existing policy files are preserved. `init-policies` remains an alias. Override the destination with `safe-repo-export init --directory /path/to/project/.safe-repo-export`.
-
-Without installation, `./init_lists.sh` is available at this toolkit's root; Windows can use `python scripts/init_lists.py`. To prepare another repository, call the script by its absolute path from that repository:
-
-```console
-/path/to/safe-repo-export/init_lists.sh
-```
-
-The script preserves the caller's directory. Commit the generated or edited policies before exporting them.
-
-| File | Purpose |
+| Entry point | Purpose |
 |---|---|
-| `safe-repo-export-include.list` | Case-sensitive paths/wildcards eligible for export |
-| `safe-repo-export-exclude.list` | Paths/wildcards always removed |
-| `safe-repo-export-redact-keys.list` | Case-insensitive regexes for sensitive configuration keys |
-| `safe-repo-export-public-hosts.list` | Literal public hosts allowed to remain |
-| `safe-repo-export-sanitize-skip.list` | Files exempt from redaction and built-in/Gitleaks scans |
-| `safe-repo-export-gitleaks-ignore.list` | Gitleaks-only exact lines, full-line regexes or paths |
+| `safe-repo-export [options]` | Filter, redact, scan, export and optionally archive |
+| `safe-repo-export init` / `init-policies` | Write six default policies, preserving existing files |
+| `python -m safe_repo_export ...` | Equivalent CLI using the selected Python environment |
+| `python safe_repo_export.py ...` | Source checkout entry; no installation needed |
+| `safe-repo-export-version ...` | Maintain this toolkit’s version, not the exported project |
+| `python -m safe_repo_export.release ...` | Equivalent version command |
 
-Precedence: explicit CLI file > `.safe-repo-export/` policy from the selected commit > bundled default. Each file replaces the corresponding default completely. Empty files mean empty lists; an empty include list retains no source files. Blank lines and `#` comments are ignored. Paths use `/` on every OS; `**/` also matches zero directories. No scan/redaction exemptions or Gitleaks ignores are enabled by default.
+## Export options (complete)
 
-```console
-safe-repo-export --repo /path/to/project --output /path/to/exports/project --include-list /path/to/include.list --exclude-list /path/to/exclude.list --redact-keys /path/to/keys.list
+| Option | Meaning |
+|---|---|
+| `--repo PATH` | Git repository containing the current directory; accepts a subdirectory |
+| `--ref REF` | Committed branch, tag or commit; default HEAD |
+| `--output PATH` | Required; output must be outside the source repository and must not contain it |
+| `--worktree` | Export tracked files from disk, including staged/unstaged edits and deletions; HEAD only |
+| `--allow-dirty` | Allow tracked edits but export only committed content |
+| `--archive none\|zip\|tar.gz` | Archive format; default none; also write an adjacent .sha256 |
+| `--replace` | Replace differing output/archive destinations with rollback on failure |
+| `--salt-file PATH` | Persistent private salt; default OUTPUT.pseudonym-salt; keep outside source and destinations |
+| `--require-gitleaks` | Require Gitleaks installation; findings/scan errors remain advisory |
+| `--gitleaks-strict` | Require Gitleaks and block on findings or scan/report errors |
+| `--include-list PATH` | Override included paths |
+| `--exclude-list PATH` | Override excluded paths |
+| `--skip-list PATH` | Override paths exempt from redaction and scanning |
+| `--redact-keys PATH` | Override sensitive-key regular expressions |
+| `--public-hosts PATH` | Override public-host allowlist |
+| `--gitleaks-ignore PATH` | Override Gitleaks-only ignore rules |
+| `--version` | Print installed version |
+| `-h, --help` | Show help; no arguments also show help |
+
+Without `--repo`, discover the Git root containing the current directory. Relative output paths use the command’s current directory. `--worktree` requires default `HEAD` and cannot use another `--ref`.
+
+## Policy initialization and precedence
+
+```sh
+safe-repo-export init
+safe-repo-export init --directory /path/to/rules
 ```
 
-Example include list:
+`init` writes to the repository root’s `.safe-repo-export/`, including when run from a subdirectory. Outside Git it uses the current directory. Its only options are `--directory PATH` and `-h/--help`. Existing files are preserved.
+
+| File (under .safe-repo-export/) | Meaning |
+|---|---|
+| `safe-repo-export-include.list` | Case-sensitive paths/globs; default ** |
+| `safe-repo-export-exclude.list` | Paths/globs always removed |
+| `safe-repo-export-redact-keys.list` | Case-insensitive sensitive-key regexes |
+| `safe-repo-export-public-hosts.list` | Hosts allowed to remain, including their subdomains |
+| `safe-repo-export-sanitize-skip.list` | Paths exempt from redaction, built-in scan and Gitleaks |
+| `safe-repo-export-gitleaks-ignore.list` | Gitleaks-only complete lines, regex: or path: rules |
+
+Precedence: explicit CLI policy > selected commit’s policy (working-tree policy with `--worktree`) > bundled default. Each file replaces its default completely; an empty include retains no source files. Blank lines and `#` comments are ignored. Use `/` paths; `**/` can match zero directories. Retained `.list` bytes are preserved but still subject to path filtering and the built-in scan.
+
+Host entries also match subdomains; credentials or URL query parameters are not exempted. `sanitize-skip` bypasses redaction and scanning; `gitleaks-ignore` affects only Gitleaks. Ignore examples:
 
 ```text
-src/**
-tests/**
-docs/**
-pyproject.toml
-package.json
-.safe-repo-export/**
-```
-
-Bundled defaults live in `safe_repo_export/policies/` and are included in the wheel. Retained `.list` files are preserved byte-for-byte, including regex escapes and CRLF endings. They remain subject to path filtering and the built-in residual scan. Generated reports replace source files of the same names under `.safe-repo-export/`.
-
-## Redaction and scanning
-
-Configuration (YAML, JSON, XML, properties, INI, TOML and related formats) uses strict key redaction and deterministic pseudonyms for URLs, IPs, domains and contextual identifiers. Public-host exceptions apply to configuration URL keys as well as ordinary URLs. Credentials, URL userinfo/query strings and webhook fields remain redacted. Maven `pom.xml` uses a narrower policy: only explicit `http://` and `https://` URLs are treated as URLs; other element and attribute values are redacted when their keys match sensitive-key rules. Maven group IDs, Java class names, dependency coordinates and URL property references retain their original values. Public-host exceptions still apply to HTTP(S) URLs.
-
-Source code uses narrower credential-literal rules for Java, JS/TS, Python, Go, Kotlin, Rust, C/C++, Shell and other supported extensions. Business constants, addresses, hashes and protocol topics are retained. Explicit credential literals and recognizable private-key blocks, JWTs, Telegram tokens, AWS access keys, GitHub tokens, Slack tokens and URLs containing user credentials are redacted. Keyword and regex definitions are preserved unless they contain a recognized actual secret format.
-
-Standalone `.sql` files keep DDL/comments while removing data-mutating statements (`INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `LOAD DATA`, `COPY`). MyBatis XML is not treated as a SQL dump. Source handling is lexical rather than a complete parser for every language.
-
-A high-confidence built-in residual scan blocks export. Reports include rule names and locations, never matched values. Review `.safe-repo-export/EXPORT-REPORT.md`, retained configuration and policies before sharing; automatic rules cannot identify every business-specific secret.
-
-Gitleaks, when available, adds a directory scan using `gitleaks dir`. Findings and scanner/report errors are advisory by default. `--require-gitleaks` requires installation; `--gitleaks-strict` also blocks on findings and scan/report errors. See the [official Gitleaks documentation](https://github.com/gitleaks/gitleaks#usage) for installation and supported commands.
-
-Gitleaks ignore examples:
-
-```text
-# Exact complete line (outer whitespace is ignored)
 assertEquals("example", result);
-# Full-line Python regex
-regex:assertEquals\(\s*"example"\s*,\s*result\s*\);
-# Repository-relative path/wildcard
+regex:assertEquals\(.*\);
 path:tests/fixtures/**
 ```
 
-Ignore rules affect Gitleaks only; skip-list rules exempt matching files from both sanitization and scanning. Multiline findings are ignored only when every covered line matches. Direct Gitleaks commands do not read these toolkit policies.
+## Export and redaction behavior
 
-## Private salt
+- Start with tracked paths; remove dependencies, build outputs, caches, local `.env`, key material and binary files. Remove symlinks, omit submodule contents and do not download LFS objects.
+- Output is a standalone Git repository with one sanitized commit, no remote and no source history. Archives exclude `.git`. Reports: `.safe-repo-export/EXPORT-REPORT.md` and `MANIFEST.sha256`.
+- Identical input/salt reruns preserve output; changes require `--replace`. Failed replacement rolls back, but is not a crash-proof multi-file transaction. Adjacent lock files remain; process exit releases locks.
+- Configuration uses sensitive-key and URL/IP/domain rules. YAML numbers, booleans, null, empty values and whitespace-only quoted values remain intact; replacements preserve colon spacing, inline comments and CRLF.
+- POM treats only `http://` and `https://` content as URLs and applies sensitive-key rules to other values. Maven groupId, Java class names, coordinates and URL property references remain intact.
+- Source uses narrower credential rules: retain business constants, addresses, hashes and ordinary word lists; redact explicit credential assignments, Map/dict values and recognizable tokens/private keys. `"secret", "section"` in a list is not a key/value pair.
+- Standalone SQL retains DDL/comments and removes INSERT/REPLACE/UPDATE/DELETE/LOAD DATA/COPY data statements. MyBatis XML is not treated as a SQL dump.
+- High-confidence built-in residual findings block export; reports omit matched values. Gitleaks is advisory unless strict mode is enabled. Rules are not complete language parsers; review reports and retained configuration before sharing.
+- Private salt defaults to adjacent `OUTPUT.pseudonym-salt`, never exported or archived. Reuse it for stable pseudonyms. Unix requires 0600; Windows uses account/filesystem permissions.
 
-The persistent salt defaults to `OUTPUT.pseudonym-salt`, beside the output. Reusing it produces stable pseudonyms and reproducible reruns. Set another location with `--salt-file`. It must be outside the source repository, output and archive destinations. It is never copied into the output or archive. New salt files are removed if the export fails; existing salts remain.
+## Local source installation and command locations
 
-Unix permissions must be `0600`. Windows uses account/filesystem access controls rather than Unix mode-bit validation. Keep the salt private.
+```sh
+./install.sh                         # macOS/Linux
+python install.py                    # Windows / cross-platform
+./install.sh --venv ../safe-repo-export-env
+```
 
-## Development and releases
+| Option | Meaning |
+|---|---|
+| `--venv PATH` | Managed environment path; default project/.venv |
+| `--commands-dir PATH` | Launcher directory; default ~/.local/bin |
+| `--no-register` | Install environment without registering commands or PATH |
+| `--force` | Force environment rebuild |
+| `--dry-run` | Only preview destination |
+| `-h, --help` | Show help |
 
-```console
+The package lives in a dedicated virtual environment. The two `~/.local/bin` launchers do not install it into system Python. The installer configures user PATH when needed for new terminals, reuses unchanged source and restores the prior environment on failed rebuild. `SAFE_REPO_EXPORT_PYTHON` selects the Shell installer’s interpreter.
+
+If pip reports a new version but the CLI is old, inspect `type -a safe-repo-export`. To switch back to a pyenv installation, remove installer launchers and refresh:
+
+```sh
+rm -f ~/.local/bin/safe-repo-export ~/.local/bin/safe-repo-export-version
+pyenv rehash
+rehash
+safe-repo-export --version
+```
+
+## Version maintenance and releases
+
+Run at this toolkit’s source root or specify `--repo`. This does not upgrade the installed tool; use `python -m pip install --upgrade safe-repo-export` for that.
+
+```sh
+safe-repo-export-version patch --dry-run
+./bump_version.sh 0.1.4 --push
+# Windows / cross-platform:
+python scripts/bump_version.py 0.1.4 --push
+```
+
+| Option | Meaning |
+|---|---|
+| `patch / minor / major / X.Y.Z` | Positional change: increment or specify a higher stable version |
+| `--repo PATH` | Toolkit source root; default current directory, without root discovery |
+| `--commit` | Commit only the version source; requires a clean worktree |
+| `--tag` | Imply --commit and create annotated tag vX.Y.Z |
+| `--push` | Imply --tag; atomically push branch and tag |
+| `--remote NAME` | Push remote; default origin |
+| `--message TEXT` | Custom commit/tag message |
+| `--dry-run` | Preview without changing files |
+| `--check-tag vX.Y.Z` | Only verify tag/package version; cannot combine with a change or release actions |
+| `-h, --help` | Show help |
+
+Root wrappers: `bump_version.sh` delegates to `scripts/bump_version.py`; `commit_and_tag.sh vX.Y.Z [MESSAGE] [--push]` accepts an explicit version; `init_lists.sh` (Windows: `python scripts/init_lists.py`) initializes policies while preserving the caller’s directory.
+
+Standalone Tests and package runs only on manual dispatch, not push/PR. Pushing a `v*` tag triggers publishing, retaining release tests/build/install checks on three platforms × Python 3.10/3.14. Manual publishing accepts an existing tag. See [release setup](docs/RELEASING.md) and [changelog](CHANGELOG.md).
+
+## Advanced pipeline subcommands
+
+Normal export orchestrates these steps automatically; direct use is rarely needed. Required arguments are listed below; every command supports `-h/--help`.
+
+| Command | Required arguments | Purpose |
+|---|---|---|
+| `safe-repo-export generate-salt` | `--output PATH` | Create/validate a private salt file |
+| `safe-repo-export sanitize` | `--root PATH, --include PATH, --exclude PATH, --redact-keys PATH, --public-hosts PATH, --salt-file PATH, --state PATH` | Filter/redact in place and write state; modifies --root |
+| `safe-repo-export summarize-gitleaks` | `--input PATH` | Summarize a Gitleaks JSON report |
+| `safe-repo-export finalize` | `--root PATH, --state PATH, --gitleaks-status TEXT` | Generate export report and checksum manifest |
+
+Optional arguments:
+
+- `sanitize`: `--skip-list PATH`, `--gitleaks-ignore PATH`, `--ignore-state PATH`.
+- `summarize-gitleaks`: `--root PATH`, `--skip-list PATH`, `--ignore-state PATH`, `--summary PATH`.
+- `finalize`: `--gitleaks-summary PATH`.
+
+`--state` / `--ignore-state` are pipeline JSON state files. `--input` is a Gitleaks JSON report; `--summary` writes a summary, `--gitleaks-summary` reads it, and `--gitleaks-status` supplies report status text.
+
+## Development checks
+
+```sh
 python -m unittest discover -s tests -v
 python -m pip install build twine
 python -m build
@@ -184,26 +189,4 @@ python -m twine check dist/*
 python scripts/smoke_test.py --dist dist
 ```
 
-The smoke check installs the wheel into the current Python environment and exercises it outside the source tree; use a virtual environment. The Tests and package workflow runs only when manually dispatched; ordinary pushes and pull requests do not trigger it. Release tags still trigger the publishing workflow, including tests and wheel installation on Windows/macOS/Linux with Python 3.10 and 3.14.
-
-One-command version updates:
-
-```console
-python scripts/bump_version.py patch --dry-run
-python scripts/bump_version.py patch
-python scripts/bump_version.py minor --tag
-python scripts/bump_version.py patch --push
-```
-
-Root Shell entries for version updates and releases:
-
-```console
-./bump_version.sh patch --dry-run
-./bump_version.sh patch
-./bump_version.sh patch --push
-./commit_and_tag.sh v0.1.1 "Release v0.1.1"
-```
-
-`commit_and_tag.sh` accepts an explicit version (with or without `v`) and an optional message, then commits the version and creates the annotated tag. Add `--push` to push. Both Shell entries work when called from another directory and delegate to `scripts/bump_version.py`; they do not require local installation.
-
-`--tag` implies a version commit. `--push` implies commit/tag and pushes the branch plus its `vX.Y.Z` tag atomically. `major`, `minor`, `patch` and explicit `X.Y.Z` versions are supported. Without Git flags, only the version source is updated. Publishing supports manual dispatch with an existing tag, or a push of a `v*` tag. Authentication and first-release setup are documented in [RELEASING.md](docs/RELEASING.md).
+Run smoke tests in a disposable environment: they install the wheel into the current Python. Clear old dist artifacts before building so only one wheel is present. Source changes reach PyPI only after the next release.
