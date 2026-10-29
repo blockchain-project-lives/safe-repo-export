@@ -184,7 +184,7 @@ python -m twine check dist/*
 python scripts/smoke_test.py --dist dist
 ```
 
-The smoke check installs the wheel into the current Python environment and exercises it outside the source tree; use a virtual environment. CI runs tests and wheel installation on Windows/macOS/Linux with Python 3.10 and 3.14.
+The smoke check installs the wheel into the current Python environment and exercises it outside the source tree; use a virtual environment. The Tests and package workflow runs only when manually dispatched; ordinary pushes and pull requests do not trigger it. Release tags still trigger the publishing workflow, including tests and wheel installation on Windows/macOS/Linux with Python 3.10 and 3.14.
 
 One-command version updates:
 
