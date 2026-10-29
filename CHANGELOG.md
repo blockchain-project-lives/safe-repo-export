@@ -7,6 +7,9 @@ Versions and dates follow repository tags and commits. A tag records source hist
 
 ## Unreleased / 未发布
 
+- Add a default-rule guide covering policy precedence, source/config differences, Redis keys, EVM literals and format-specific behavior; link it from both READMEs.
+  新增默认规则说明，涵盖优先级、源码/配置差异、Redis key、EVM 字面量及格式专门行为，中英文 README 均引用。
+
 - Rewrite both READMEs with complete CLI/module, export, initialization, installation, version and advanced pipeline references; link this changelog.
   重整中英文 README，完整列出命令、模块入口、导出、初始化、安装、版本维护及高级流水线参数，并引用更新记录。
 - Correct outdated release documentation and include this changelog in source distributions.

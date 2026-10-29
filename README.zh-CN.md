@@ -4,6 +4,8 @@
 
 过滤、脱敏并导出 Git 仓库快照，用于分享或代码分析。Python 3.10+，支持 Windows/macOS/Linux，使用标准库，无运行时 Python 包依赖；需要 Git，Gitleaks 可选。
 
+六份默认规则、Redis key、EVM 地址/哈希及 YAML/JSON 差异详见 [默认规则说明](docs/DEFAULT_RULES.md)。
+
 ## 安装与快速使用
 
 ```sh

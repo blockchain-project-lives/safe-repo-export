@@ -4,6 +4,8 @@
 
 Export filtered, sanitized Git snapshots for sharing or code analysis. Python 3.10+, Windows/macOS/Linux, standard library only and no runtime Python package dependencies. Git is required; Gitleaks is optional.
 
+Default preservation/redaction decisions, Redis keys, EVM addresses/hashes, YAML/JSON differences and all six policies: [Default rules](docs/DEFAULT_RULES.md).
+
 ## Install and quick start
 
 ```sh
