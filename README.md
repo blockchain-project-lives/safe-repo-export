@@ -68,11 +68,24 @@ safe-repo-export init --help
 safe-repo-export --output ../sanitized --archive zip
 ```
 
+For local debugging without committing source changes:
+
+```sh
+safe-repo-export --worktree --output ../sanitized --replace
+```
+
+To export a committed branch, tag or commit:
+
+```sh
+safe-repo-export --ref v1.0.0 --output ../sanitized
+```
+
 Running `safe-repo-export` with no arguments also prints usage. Export defaults to the current Git repository and `HEAD`, with no archive; `--output` is required and must be outside the source repository.
 
 ## Export behavior
 
-- Export the selected committed `--ref` (default `HEAD`), including its committed policies. Untracked files and uncommitted edits are never copied. `--allow-dirty` permits tracked edits without exporting them.
+- Export the selected committed `--ref` (default `HEAD`), including its committed policies. `--allow-dirty` permits tracked edits without exporting them.
+- Use `--worktree` to export current tracked files, including staged/unstaged edits and deletions, with current working-tree policies. Stage new files with `git add` to include them; untracked files remain excluded. This mode requires `HEAD`, does not change the source index or create a source commit, and runs the same filtering and redaction pipeline. Avoid editing files while a worktree export is running.
 - Output must be outside the source repository and must not contain it. The source tree is unchanged.
 - Include all tracked paths by default, then exclude dependencies, build artifacts, caches, local `.env` files, key material, archives and binaries. These defaults work across project languages; use a narrower include policy when needed.
 - Retain automation and IDE configuration, including `.github/`, `.idea/`, `.vscode/` and `.safe-repo-export/`, subject to filtering and sanitization.

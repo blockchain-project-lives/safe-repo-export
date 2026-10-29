@@ -103,6 +103,18 @@ def resolve_policies(args, repo: Path, commit: str, transaction: Path) -> dict[s
         explicit = getattr(args, option)
         if explicit is not None:
             path = resolve_path(explicit, filename)
+        elif args.worktree:
+            path = repo / ".safe-repo-export" / filename
+            if path.is_symlink() or path.parent.is_symlink():
+                raise ExportError(f"Repository policy must be a regular file: {filename}")
+            if path.exists():
+                if not path.is_file():
+                    raise ExportError(f"Policy is not a regular file: {filename}")
+                content = path.read_bytes()
+                path = transaction / filename
+                path.write_bytes(content)
+            else:
+                path = DEFAULT_POLICIES / filename
         else:
             entry = git(repo, "ls-tree", commit, "--", f".safe-repo-export/{filename}")
             if entry:
@@ -117,6 +129,45 @@ def resolve_policies(args, repo: Path, commit: str, transaction: Path) -> dict[s
             raise ExportError(f"Policy is not a regular file: {path}")
         selected[option] = path
     return selected
+
+
+def copy_worktree(repo: Path, root: Path, executables: set[str]) -> int:
+    """Copy indexed paths from disk without modifying the index or following links."""
+    skipped_links = 0
+    for entry in git(repo, "ls-files", "--stage", "-z").split(b"\0"):
+        if not entry:
+            continue
+        metadata, raw_name = entry.split(b"\t", 1)
+        mode, _, stage = metadata.split()
+        if stage != b"0":
+            raise ExportError("Resolve merge conflicts before using --worktree")
+        name = PurePosixPath(os.fsdecode(raw_name))
+        if (name.is_absolute() or ".." in name.parts or ".git" in name.parts
+                or any(char in str(name) for char in "\\:\n\r")):
+            raise ExportError("Worktree contains an unsafe or non-portable path")
+        if mode == b"160000":
+            continue  # Do not descend into submodules.
+        if mode == b"120000":
+            skipped_links += 1
+            continue
+        source = repo.joinpath(*name.parts)
+        if any(parent.is_symlink() for parent in [source, *source.parents] if parent != repo):
+            skipped_links += 1
+            continue
+        try:
+            info = source.stat()
+        except FileNotFoundError:
+            continue  # Tracked file deleted in the working directory.
+        if not stat.S_ISREG(info.st_mode):
+            raise ExportError("Worktree contains a tracked path that is not a regular file")
+        target = root.joinpath(*name.parts)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+        executable = mode == b"100755"
+        target.chmod(0o755 if executable else 0o644)
+        if executable:
+            executables.add(name.as_posix())
+    return skipped_links
 
 
 def extract_snapshot(archive: Path, root: Path, executables: set[str] | None = None) -> int:
@@ -330,10 +381,12 @@ def export(args) -> Path:
         raise ExportError("Output must be outside the source repository and cannot contain it")
     if output.exists() and not output.is_dir():
         raise ExportError("Output must be a directory")
+    if args.worktree and args.ref != "HEAD":
+        raise ExportError("--worktree uses current HEAD and cannot be combined with another --ref")
     commit = git(repo, "rev-parse", "--verify", "--end-of-options", f"{args.ref}^{{commit}}").decode().strip()
     epoch = int(git(repo, "show", "-s", "--format=%ct", commit))
-    if not args.allow_dirty and git(repo, "status", "--porcelain", "--untracked-files=no"):
-        raise ExportError("Tracked changes exist; commit/stash or use --allow-dirty (changes are not exported)")
+    if not args.worktree and not args.allow_dirty and git(repo, "status", "--porcelain", "--untracked-files=no"):
+        raise ExportError("Tracked changes exist; use --worktree to include edits, or --allow-dirty to export only committed content")
     salt = resolve_path(args.salt_file or f"{output}.pseudonym-salt", "Salt file")
     targets = [output]
     if args.archive != "none":
@@ -358,13 +411,16 @@ def export(args) -> Path:
                 candidate.mkdir()
                 policies = resolve_policies(args, repo, commit, transaction)
                 engine.command_generate_salt(argparse.Namespace(output=str(salt)))
-                snapshot = transaction / "snapshot.tar"
-                git(repo, "archive", "--format=tar", f"--output={snapshot}", commit)
                 executables: set[str] = set()
-                skipped_links = extract_snapshot(snapshot, candidate, executables)
-                snapshot.unlink()
+                if args.worktree:
+                    skipped_links = copy_worktree(repo, candidate, executables)
+                else:
+                    snapshot = transaction / "snapshot.tar"
+                    git(repo, "archive", "--format=tar", f"--output={snapshot}", commit)
+                    skipped_links = extract_snapshot(snapshot, candidate, executables)
+                    snapshot.unlink()
                 state = transaction / "sanitize-state.json"
-                LOG.info("Filtering and sanitizing selected commit")
+                LOG.info("Filtering and sanitizing %s", "working tree" if args.worktree else "selected commit")
                 result = engine.command_sanitize(argparse.Namespace(
                     root=str(candidate), include=str(policies["include_list"]), exclude=str(policies["exclude_list"]),
                     skip_list=str(policies["skip_list"]), redact_keys=str(policies["redact_keys"]),

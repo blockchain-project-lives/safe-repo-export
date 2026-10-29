@@ -130,6 +130,48 @@ class ExportTests(unittest.TestCase):
         export(self.args("--ref", previous))
         self.assertIn("value = 1", (self.output / "src/app.py").read_text())
 
+    def test_worktree_exports_disk_content_without_changing_source_index(self):
+        self.write("src/app.py", b'value = 2\napi_key = "worktree-secret"\n')
+        self.git("add", "src/app.py")
+        self.write("src/app.py", b'value = 3\napi_key = "worktree-secret"\n')
+        self.write("src/new.py", b"new_value = 4\n")
+        self.git("add", "src/new.py")
+        self.write("src/untracked.py", b"not_exported = True\n")
+        (self.repo / "src/app.ts").unlink()
+        before = self.git("status", "--porcelain")
+        index = self.git("write-tree")
+        head = self.git("rev-parse", "HEAD")
+        export(self.args("--worktree", "--archive", "zip"))
+        content = (self.output / "src/app.py").read_text()
+        self.assertIn("value = 3", content)
+        self.assertNotIn("worktree-secret", content)
+        self.assertTrue((self.output / "src/new.py").exists())
+        self.assertFalse((self.output / "src/untracked.py").exists())
+        self.assertFalse((self.output / "src/app.ts").exists())
+        self.assertEqual(self.git("status", "--porcelain"), before)
+        self.assertEqual(self.git("write-tree"), index)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        verify_manifest(self.output)
+
+    def test_worktree_uses_uncommitted_policy_and_rejects_other_ref(self):
+        filename = ".safe-repo-export/safe-repo-export-include.list"
+        self.write(filename, b"src/app.py\n")
+        export(self.args("--worktree"))
+        self.assertTrue((self.output / "src/app.py").exists())
+        self.assertFalse((self.output / "settings.toml").exists())
+        with self.assertRaisesRegex(ExportError, "current HEAD"):
+            export(self.args("--worktree", "--ref", self.git("rev-parse", "HEAD")))
+
+    @unittest.skipUnless(hasattr(os, "symlink") and os.name != "nt", "POSIX symlink support required")
+    def test_worktree_does_not_follow_replaced_directory_symlink(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "app.py").write_text("private_external_content = True\n")
+        shutil.rmtree(self.repo / "src")
+        (self.repo / "src").symlink_to(outside, target_is_directory=True)
+        export(self.args("--worktree"))
+        self.assertFalse((self.output / "src/app.py").exists())
+
     def test_replace_required_and_preserves_previous_on_conflict(self):
         export(self.args("--archive", "zip"))
         old = (self.output / "src/app.py").read_bytes()

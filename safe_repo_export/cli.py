@@ -14,7 +14,7 @@ from .exporter import DEFAULT_POLICIES, POLICIES, ExportError, export, git
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="safe-repo-export",
-        description="Filter and sanitize a Git commit for sharing or code analysis.",
+        description="Filter and sanitize a Git commit or working tree for sharing or code analysis.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Commands:
   init                  Write default .list files to the current repository's
@@ -23,12 +23,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 Examples:
   safe-repo-export --output ../sanitized --archive zip
+  safe-repo-export --worktree --output ../sanitized --replace
   safe-repo-export init
   safe-repo-export init --help
   safe-repo-export init --directory /path/to/project/.safe-repo-export
 
 Defaults: current repository, HEAD, no archive. --output is required for export.
-Commit edited repository policies before exporting.""",
+Commit edited repository policies before exporting, or use --worktree.""",
     )
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--repo", default=".", help="Source Git repository (default: current directory)")
@@ -36,6 +37,7 @@ Commit edited repository policies before exporting.""",
     parser.add_argument("--output", required=True, help="Output directory outside the source repository")
     parser.add_argument("--archive", choices=["none", "zip", "tar.gz"], default="none")
     parser.add_argument("--replace", action="store_true", help="Replace differing output and archives with rollback on failure")
+    parser.add_argument("--worktree", action="store_true", help="Export current tracked working files and policies, including staged/unstaged edits; requires HEAD")
     parser.add_argument("--allow-dirty", action="store_true", help="Ignore tracked edits; only committed content is exported")
     parser.add_argument("--require-gitleaks", action="store_true")
     parser.add_argument("--gitleaks-strict", action="store_true", help="Require Gitleaks and block on findings/errors")
